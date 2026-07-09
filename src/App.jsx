@@ -50,7 +50,6 @@ export default function App() {
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitEmail, setSubmitEmail] = useState("");
   const [submitNotes, setSubmitNotes] = useState("");
-  const [submitDone, setSubmitDone] = useState(false);
   const [noteDraft, setNoteDraft] = useState(notes);
   const [noteFlash, setNoteFlash] = useState(false);
 
@@ -73,14 +72,16 @@ export default function App() {
   }, [items]);
 
   const filteredItems = useMemo(() => {
-    return items.filter((it) => {
-      if (activeCat !== "All" && it.category !== activeCat) return false;
-      if (search.trim()) {
-        const q = search.trim().toLowerCase();
-        if (!it.name.toLowerCase().includes(q) && !it.category.toLowerCase().includes(q)) return false;
-      }
-      return true;
-    });
+    return items
+      .filter((it) => {
+        if (activeCat !== "All" && it.category !== activeCat) return false;
+        if (search.trim()) {
+          const q = search.trim().toLowerCase();
+          if (!it.name.toLowerCase().includes(q) && !it.category.toLowerCase().includes(q)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [items, activeCat, search]);
 
   const checkedOutItems = useMemo(
@@ -238,12 +239,7 @@ export default function App() {
           setEmail={setSubmitEmail}
           notes={submitNotes}
           setNotes={setSubmitNotes}
-          done={submitDone}
-          onSubmit={() => setSubmitDone(true)}
-          onClose={() => {
-            setSubmitOpen(false);
-            setSubmitDone(false);
-          }}
+          onClose={() => setSubmitOpen(false)}
         />
       )}
     </div>

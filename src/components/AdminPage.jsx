@@ -21,10 +21,10 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (i) => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q)
-    );
+    const base = q
+      ? items.filter((i) => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q))
+      : items;
+    return [...base].sort((a, b) => a.name.localeCompare(b.name));
   }, [items, search]);
 
   function openNew() {

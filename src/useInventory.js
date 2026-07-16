@@ -17,10 +17,12 @@ import { db, firebaseConfigured } from "./firebase";
 import { SEED_ITEMS } from "./seedData";
 
 const ITEMS_COL = "items";
+const ORDERS_COL = "orders";
 const META_DOC = "meta/shared";
 
 export function useInventory() {
   const [items, setItems] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState("yellow"); // green | yellow | red
@@ -44,6 +46,20 @@ export function useInventory() {
         setReady(true);
       },
       () => setSyncStatus("red")
+    );
+    return () => unsub();
+  }, []);
+
+  // live orders (submitted equipment requests)
+  useEffect(() => {
+    if (!firebaseConfigured) return;
+    const q = query(collection(db, ORDERS_COL), orderBy("createdAtMs", "desc"));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      () => {}
     );
     return () => unsub();
   }, []);
@@ -138,6 +154,27 @@ export function useInventory() {
     }
   }, []);
 
+  const addOrder = useCallback(async (order) => {
+    setSyncStatus("yellow");
+    try {
+      await addDoc(collection(db, ORDERS_COL), {
+        requesterName: order.requester.name || "",
+        requesterPhone: order.requester.phone || "",
+        requesterEmail: order.requesterEmail || "",
+        eventDate: order.requester.eventDate || "",
+        pickupDate: order.requester.pickupDate || "",
+        returnDate: order.requester.returnDate || "",
+        items: order.items, // [{ name, qty }]
+        notes: order.notes || "",
+        createdAtMs: Date.now(),
+        createdAtLabel: new Date().toLocaleString(),
+      });
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
+    }
+  }, []);
+
   const saveNotes = useCallback(async (text) => {
     setSyncStatus("yellow");
     try {
@@ -150,6 +187,7 @@ export function useInventory() {
 
   return {
     items,
+    orders,
     notes,
     loading,
     syncStatus,
@@ -159,6 +197,7 @@ export function useInventory() {
     updateItem,
     deleteItem,
     applyCheckChange,
+    addOrder,
     saveNotes,
   };
 }

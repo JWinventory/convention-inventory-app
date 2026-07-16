@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from import React, { useEffect, useMemo, useState } from "react";
 import { S, CAT_COLORS } from "./styles";
 import { Icon } from "./components/Icon";
 import { RequesterForm } from "./components/RequesterForm";
@@ -8,6 +8,7 @@ import { ScanModal } from "./components/ScanModal";
 import { QrModal } from "./components/QrModal";
 import { SubmitModal } from "./components/SubmitModal";
 import { AdminPage } from "./components/AdminPage";
+import { OrdersPage } from "./components/OrdersPage";
 import { useInventory } from "./useInventory";
 import { firebaseConfigured } from "./firebase";
 
@@ -26,6 +27,7 @@ function loadRequester() {
 export default function App() {
   const {
     items,
+    orders,
     notes,
     syncStatus,
     seedIfEmpty,
@@ -33,6 +35,7 @@ export default function App() {
     updateItem,
     deleteItem,
     applyCheckChange,
+    addOrder,
     saveNotes,
   } = useInventory();
 
@@ -131,6 +134,9 @@ export default function App() {
             <button style={{ ...S.navTab, ...(tab === "inventory" ? S.navTabActive : {}) }} onClick={() => setTab("inventory")}>
               Inventory
             </button>
+            <button style={{ ...S.navTab, ...(tab === "orders" ? S.navTabActive : {}) }} onClick={() => setTab("orders")}>
+              Orders
+            </button>
             <button style={{ ...S.navTab, ...(tab === "admin" ? S.navTabActive : {}) }} onClick={() => setTab("admin")}>
               Admin
             </button>
@@ -139,7 +145,9 @@ export default function App() {
       </header>
 
       <main style={S.main}>
-        {tab === "admin" ? (
+        {tab === "orders" ? (
+          <OrdersPage orders={orders} items={items} />
+        ) : tab === "admin" ? (
           <AdminPage
             items={items}
             addItem={addItem}
@@ -239,6 +247,7 @@ export default function App() {
           setEmail={setSubmitEmail}
           notes={submitNotes}
           setNotes={setSubmitNotes}
+          onOrderCreated={addOrder}
           onClose={() => setSubmitOpen(false)}
         />
       )}
@@ -255,3 +264,4 @@ function SyncDot({ status }) {
     </div>
   );
 }
+

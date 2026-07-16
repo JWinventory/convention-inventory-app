@@ -3,7 +3,7 @@ import { Modal } from "./Modal";
 import { S } from "../styles";
 import { Icon } from "./Icon";
 
-export function SubmitModal({ requester, checkedOutItems, email, setEmail, notes, setNotes, onClose }) {
+export function SubmitModal({ requester, checkedOutItems, email, setEmail, notes, setNotes, onOrderCreated, onClose }) {
   const [status, setStatus] = useState("idle"); // idle | sending | done | error
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -27,6 +27,14 @@ export function SubmitModal({ requester, checkedOutItems, email, setEmail, notes
         setStatus("error");
         return;
       }
+      if (onOrderCreated) {
+        onOrderCreated({
+          requester,
+          requesterEmail: email,
+          items: checkedOutItems.map((it) => ({ name: it.name, qty: it.out })),
+          notes,
+        });
+      }
       setStatus("done");
     } catch (err) {
       setErrorMsg("Couldn't reach the notification service. Check your connection and try again.");
@@ -44,7 +52,8 @@ export function SubmitModal({ requester, checkedOutItems, email, setEmail, notes
           <div style={S.successTitle}>Notification sent</div>
           <div style={S.tinyMuted}>
             The equipment coordinator has been emailed about {checkedOutItems.length} item
-            {checkedOutItems.length === 1 ? "" : "s"} for {requester.name || "this request"}.
+            {checkedOutItems.length === 1 ? "" : "s"} for {requester.name || "this request"}. You can track
+            it on the Orders tab — it'll clear automatically once everything's checked back in.
           </div>
         </div>
       </Modal>

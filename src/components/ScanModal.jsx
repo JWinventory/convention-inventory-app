@@ -8,7 +8,7 @@ const SCANNER_ID = "qr-camera-region";
 export function ScanModal({ items, itemState, onResolveAction, onClose }) {
   const [mode, setMode] = useState("camera"); // camera | manual
   const [manualText, setManualText] = useState("");
-  const [scannedItem, setScannedItem] = useState(null);
+  const [scannedName, setScannedName] = useState(null);
   const [error, setError] = useState("");
   const scannerRef = useRef(null);
 
@@ -26,11 +26,11 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
       return;
     }
     setError("");
-    setScannedItem(item);
+    setScannedName(item.name);
   }
 
   useEffect(() => {
-    if (mode !== "camera" || scannedItem) return;
+    if (mode !== "camera" || scannedName) return;
     const scanner = new Html5QrcodeScanner(
       SCANNER_ID,
       { fps: 10, qrbox: { width: 220, height: 220 } },
@@ -50,19 +50,23 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
       scanner.clear().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, scannedItem]);
+  }, [mode, scannedName]);
 
-  const cur = scannedItem ? itemState[scannedItem.id] || { out: 0 } : null;
-  const isOut = cur ? cur.out > 0 : false;
+  // Always look up the live item + counts fresh on every render, so repeated
+  // taps update the numbers immediately without needing to rescan.
+  const liveItem = scannedName ? items.find((i) => i.name === scannedName) : null;
+  const cur = liveItem ? itemState[liveItem.id] || { out: 0 } : null;
+  const out = cur ? cur.out : 0;
+  const available = liveItem ? liveItem.total - out : 0;
 
   function resetScanner() {
-    setScannedItem(null);
+    setScannedName(null);
     setError("");
   }
 
   return (
     <Modal onClose={onClose} title="Scan QR Code">
-      {!scannedItem && (
+      {!scannedName && (
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <button
             style={{ ...S.catTab, ...(mode === "camera" ? S.catTabActive : {}), flex: 1 }}
@@ -79,18 +83,18 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
         </div>
       )}
 
-      {!scannedItem && mode === "camera" && (
+      {!scannedName && mode === "camera" && (
         <div>
           <div id={SCANNER_ID} />
           {error && <div style={S.errorText}>{error}</div>}
         </div>
       )}
 
-      {!scannedItem && mode === "manual" && (
+      {!scannedName && mode === "manual" && (
         <div>
           <p style={S.modalHint}>
             Paste the QR payload (a small JSON blob like{" "}
-            <code style={S.code}>{`{"id":"...","name":"...","category":"..."}`}</code>) or type an item's exact name.
+            <code style={S.code}>{`{"name":"..."}`}</code>) or type an item's exact name.
           </p>
           <textarea
             style={S.pasteBox}
@@ -112,7 +116,7 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
                 );
                 if (found) {
                   setError("");
-                  setScannedItem(found);
+                  setScannedName(found.name);
                 } else {
                   setError("No item matches that name exactly.");
                 }
@@ -124,21 +128,58 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
         </div>
       )}
 
-      {scannedItem && (
+      {liveItem && (
         <div style={S.scanResult}>
-          <div style={S.scanResultName}>{scannedItem.name}</div>
-          <div style={S.scanResultCat}>{scannedItem.category}</div>
-          <button
-            style={{ ...S.toggleBtn, ...(isOut ? S.toggleBtnIn : S.toggleBtnOut) }}
-            onClick={() => {
-              onResolveAction(scannedItem.id, isOut ? -1 : 1);
-              onClose();
-            }}
-          >
-            {isOut ? "Tap to Check IN" : "Tap to Check OUT"}
-          </button>
+          <div style={S.scanResultName}>{liveItem.name}</div>
+          <div style={S.scanResultCat}>{liveItem.category}</div>
+
+          <div style={S.countRow}>
+            <CountMini label="Total" value={liveItem.total} />
+            <CountMini label="Out" value={out} />
+            <CountMini label="Available" value={available} />
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+            <button
+              style={{
+                ...S.toggleBtn,
+                ...S.toggleBtnOut,
+                flex: 1,
+                fontSize: 14,
+                padding: "14px 0",
+                ...(available <= 0 ? { opacity: 0.4, cursor: "not-allowed" } : {}),
+              }}
+              disabled={available <= 0}
+              onClick={() => onResolveAction(liveItem.id, 1)}
+            >
+              + Check Out
+            </button>
+            <button
+              style={{
+                ...S.toggleBtn,
+                ...S.toggleBtnIn,
+                flex: 1,
+                fontSize: 14,
+                padding: "14px 0",
+                ...(out <= 0 ? { opacity: 0.4, cursor: "not-allowed" } : {}),
+              }}
+              disabled={out <= 0}
+              onClick={() => onResolveAction(liveItem.id, -1)}
+            >
+              + Check In
+            </button>
+          </div>
+
+          <div style={S.tinyMuted}>
+            Tap either button as many times as you need — it stays on this item so you can
+            check out or in multiple units at once.
+          </div>
+
           <button style={S.secondaryBtn} onClick={resetScanner}>
             Scan another item
+          </button>
+          <button style={{ ...S.secondaryBtn, marginTop: 8 }} onClick={onClose}>
+            Done
           </button>
         </div>
       )}
@@ -146,5 +187,11 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
   );
 }
 
-
-
+function CountMini({ label, value }) {
+  return (
+    <div style={S.countBox}>
+      <div style={S.countVal}>{value}</div>
+      <div style={S.countLabel}>{label}</div>
+    </div>
+  );
+}

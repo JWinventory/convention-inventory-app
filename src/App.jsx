@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { S, CAT_COLORS } from "./styles";
 import { Icon } from "./components/Icon";
 import { RequesterForm } from "./components/RequesterForm";
@@ -264,4 +264,3 @@ function SyncDot({ status }) {
     </div>
   );
 }
-

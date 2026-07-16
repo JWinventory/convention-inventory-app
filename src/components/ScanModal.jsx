@@ -20,7 +20,7 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
       setError("That doesn't look like a valid QR code for this app.");
       return;
     }
-    const item = items.find((i) => i.id === payload.id);
+    const item = items.find((i) => i.name === payload.name);
     if (!item) {
       setError("No matching item found for that code.");
       return;
@@ -145,3 +145,6 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
     </Modal>
   );
 }
+
+
+

@@ -4,7 +4,7 @@ import { QRBox } from "./QRBox";
 import { S } from "../styles";
 
 export function QrModal({ item, onClose }) {
-  const payload = JSON.stringify({ id: item.id, name: item.name, category: item.category });
+  const payload = JSON.stringify({ name: item.name });
   return (
     <Modal onClose={onClose} title={item.name}>
       <QRBox payload={payload} />

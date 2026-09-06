@@ -2,17 +2,25 @@ import React, { useMemo, useState } from "react";
 import { S, colorFor } from "../styles";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
+import { Lightbox } from "./Lightbox";
 import { fileToCompressedDataUrl } from "../imageUtils";
 
 const BLANK_FORM = { name: "", category: "", total: "1", note: "", img: null };
 
 export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty, syncStatus }) {
+  // --- password gate ---
+  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem("adminUnlocked") === "1");
+  const [pw, setPw] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [checking, setChecking] = useState(false);
+
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(null); // null | "new" | item
   const [form, setForm] = useState(BLANK_FORM);
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState("");
+  const [lightboxSrc, setLightboxSrc] = useState(null);
 
   const categories = useMemo(() => {
     const set = new Set(items.map((i) => i.category).filter(Boolean));
@@ -26,6 +34,32 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
       : items;
     return [...base].sort((a, b) => a.name.localeCompare(b.name));
   }, [items, search]);
+
+  async function handleUnlock(e) {
+    e.preventDefault();
+    if (!pw) return;
+    setChecking(true);
+    setPwError("");
+    try {
+      const res = await fetch("/api/verify-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        sessionStorage.setItem("adminUnlocked", "1");
+        setUnlocked(true);
+      } else {
+        setPwError("Incorrect password.");
+      }
+    } catch (err) {
+      setPwError("Couldn't verify password — check your connection.");
+    } finally {
+      setChecking(false);
+      setPw("");
+    }
+  }
 
   function openNew() {
     setForm(BLANK_FORM);
@@ -96,6 +130,31 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
     else setSeedMsg("Couldn't seed — check your Firebase configuration.");
   }
 
+  if (!unlocked) {
+    return (
+      <div style={S.card}>
+        <h2 style={S.cardTitle}>Admin Access</h2>
+        <p style={S.tinyMuted}>Enter the admin password to manage the catalog.</p>
+        <form onSubmit={handleUnlock}>
+          <label style={S.fieldLabel}>
+            Password
+            <input
+              style={S.fieldInput}
+              type="password"
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              autoFocus
+            />
+          </label>
+          {pwError && <div style={S.errorText}>{pwError}</div>}
+          <button style={S.primaryBtn} type="submit" disabled={checking || !pw}>
+            {checking ? "Checking…" : "Unlock"}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={S.adminBar}>
@@ -126,7 +185,13 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
 
       <div style={S.grid}>
         {filtered.map((item) => (
-          <AdminItemCard key={item.id} item={item} onEdit={() => openEdit(item)} onDelete={() => handleDelete(item)} />
+          <AdminItemCard
+            key={item.id}
+            item={item}
+            onEdit={() => openEdit(item)}
+            onDelete={() => handleDelete(item)}
+            onEnlarge={() => setLightboxSrc(item.img)}
+          />
         ))}
       </div>
 
@@ -162,11 +227,21 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
 
           <div style={S.photoUploadBox} onClick={() => document.getElementById("photo-input").click()}>
             {form.img ? (
-              <img src={form.img} alt="preview" style={S.photoPreview} />
+              <img
+                src={form.img}
+                alt="preview"
+                style={{ ...S.photoPreview, cursor: "zoom-in" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxSrc(form.img);
+                }}
+              />
             ) : (
               <div style={S.tinyMuted}>Tap to upload a photo (optional)</div>
             )}
-            <div style={{ fontSize: 11, color: "#999" }}>{form.img ? "Tap to replace" : ""}</div>
+            <div style={{ fontSize: 11, color: "#999" }}>
+              {form.img ? "Tap photo to enlarge, or tap here to replace" : ""}
+            </div>
           </div>
           <input id="photo-input" type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhoto} />
 
@@ -175,17 +250,28 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
           </button>
         </Modal>
       )}
+
+      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
     </div>
   );
 }
 
-function AdminItemCard({ item, onEdit, onDelete }) {
+function AdminItemCard({ item, onEdit, onDelete, onEnlarge }) {
   const color = colorFor(item.category);
   return (
     <div style={S.itemCard}>
       <div style={{ ...S.catStripe, background: color }} />
       <div style={S.itemImgWrap}>
-        {item.img ? <img src={item.img} alt={item.name} style={S.itemImg} /> : <div style={S.itemImgPlaceholder}>No photo</div>}
+        {item.img ? (
+          <img
+            src={item.img}
+            alt={item.name}
+            style={{ ...S.itemImg, cursor: "zoom-in" }}
+            onClick={onEnlarge}
+          />
+        ) : (
+          <div style={S.itemImgPlaceholder}>No photo</div>
+        )}
       </div>
       <div style={{ ...S.itemCat, color }}>{item.category}</div>
       <div style={S.itemName}>{item.name}</div>

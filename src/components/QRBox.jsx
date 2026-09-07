@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 
-export function QRBox({ payload }) {
+export function QRBox({ payload, color = "#1a1a2e" }) {
   const canvasRef = useRef(null);
   const [error, setError] = useState(false);
 
@@ -10,12 +10,12 @@ export function QRBox({ payload }) {
     QRCode.toCanvas(
       canvasRef.current,
       payload,
-      { width: 200, margin: 1, color: { dark: "#1a1a2e", light: "#ffffff" } },
+      { width: 200, margin: 1, color: { dark: color, light: "#ffffff" } },
       (err) => {
         if (err) setError(true);
       }
     );
-  }, [payload]);
+  }, [payload, color]);
 
   if (error) {
     return (

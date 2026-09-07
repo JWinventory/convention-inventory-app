@@ -7,10 +7,7 @@ import { NotesSection } from "./components/NotesSection";
 import { ScanModal } from "./components/ScanModal";
 import { QrModal } from "./components/QrModal";
 import { SubmitModal } from "./components/SubmitModal";
-import { AdminPage } from "./components/AdminPage";
-import { OrdersPage } from "./components/OrdersPage";
-import { QrCodesPage } from "./components/QrCodesPage";
-import { EmergencyChecklistPage } from "./components/EmergencyChecklistPage";
+import { AdminHub } from "./components/AdminHub";
 import { useInventory } from "./useInventory";
 import { firebaseConfigured } from "./firebase";
 
@@ -41,7 +38,7 @@ export default function App() {
     saveNotes,
   } = useInventory();
 
-  const [tab, setTab] = useState("inventory"); // inventory | orders | admin | qrcodes | emergency
+  const [tab, setTab] = useState("inventory"); // inventory | admin
   const [requester, setRequester] = useState(loadRequester);
   const [requesterLocked, setRequesterLocked] = useState(() => {
     const r = loadRequester();
@@ -135,15 +132,6 @@ export default function App() {
             <button style={{ ...S.navTab, ...(tab === "inventory" ? S.navTabActive : {}) }} onClick={() => setTab("inventory")}>
               Inventory
             </button>
-            <button style={{ ...S.navTab, ...(tab === "orders" ? S.navTabActive : {}) }} onClick={() => setTab("orders")}>
-              Orders
-            </button>
-            <button style={{ ...S.navTab, ...(tab === "qrcodes" ? S.navTabActive : {}) }} onClick={() => setTab("qrcodes")}>
-              QR Codes
-            </button>
-            <button style={{ ...S.navTab, ...(tab === "emergency" ? S.navTabActive : {}) }} onClick={() => setTab("emergency")}>
-              Emergency
-            </button>
             <button style={{ ...S.navTab, ...(tab === "admin" ? S.navTabActive : {}) }} onClick={() => setTab("admin")}>
               Admin
             </button>
@@ -152,15 +140,10 @@ export default function App() {
       </header>
 
       <main style={S.main}>
-        {tab === "orders" ? (
-          <OrdersPage orders={orders} items={items} />
-        ) : tab === "qrcodes" ? (
-          <QrCodesPage items={items} />
-        ) : tab === "emergency" ? (
-          <EmergencyChecklistPage items={items} />
-        ) : tab === "admin" ? (
-          <AdminPage
+        {tab === "admin" ? (
+          <AdminHub
             items={items}
+            orders={orders}
             addItem={addItem}
             updateItem={updateItem}
             deleteItem={deleteItem}

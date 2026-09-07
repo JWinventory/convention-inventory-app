@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { S, colorFor } from "../styles";
 import { Icon } from "./Icon";
+import { Lightbox } from "./Lightbox";
 
 export function ItemCard({ item, onCheckOut, onCheckIn, onShowQr, adminMode, onEdit, onDelete }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const out = item.out || 0;
   const available = item.total - out;
   const fullyOut = available <= 0;
@@ -18,7 +20,12 @@ export function ItemCard({ item, onCheckOut, onCheckIn, onShowQr, adminMode, onE
       )}
       <div style={S.itemImgWrap}>
         {item.img ? (
-          <img src={item.img} alt={item.name} style={S.itemImg} />
+          <img
+            src={item.img}
+            alt={item.name}
+            style={{ ...S.itemImg, cursor: "zoom-in" }}
+            onClick={() => setLightboxOpen(true)}
+          />
         ) : (
           <div style={S.itemImgPlaceholder}>No photo</div>
         )}
@@ -58,6 +65,10 @@ export function ItemCard({ item, onCheckOut, onCheckIn, onShowQr, adminMode, onE
             <Icon.trash /> Delete
           </button>
         </div>
+      )}
+
+      {lightboxOpen && item.img && (
+        <Lightbox src={item.img} alt={item.name} onClose={() => setLightboxOpen(false)} />
       )}
     </div>
   );

@@ -9,6 +9,8 @@ import { QrModal } from "./components/QrModal";
 import { SubmitModal } from "./components/SubmitModal";
 import { AdminPage } from "./components/AdminPage";
 import { OrdersPage } from "./components/OrdersPage";
+import { QrCodesPage } from "./components/QrCodesPage";
+import { EmergencyChecklistPage } from "./components/EmergencyChecklistPage";
 import { useInventory } from "./useInventory";
 import { firebaseConfigured } from "./firebase";
 
@@ -39,13 +41,12 @@ export default function App() {
     saveNotes,
   } = useInventory();
 
-  const [tab, setTab] = useState("inventory"); // inventory | admin
+  const [tab, setTab] = useState("inventory"); // inventory | orders | admin | qrcodes | emergency
   const [requester, setRequester] = useState(loadRequester);
   const [requesterLocked, setRequesterLocked] = useState(() => {
     const r = loadRequester();
     return Boolean(r.name && r.phone);
   });
-
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
   const [scanOpen, setScanOpen] = useState(false);
@@ -137,6 +138,12 @@ export default function App() {
             <button style={{ ...S.navTab, ...(tab === "orders" ? S.navTabActive : {}) }} onClick={() => setTab("orders")}>
               Orders
             </button>
+            <button style={{ ...S.navTab, ...(tab === "qrcodes" ? S.navTabActive : {}) }} onClick={() => setTab("qrcodes")}>
+              QR Codes
+            </button>
+            <button style={{ ...S.navTab, ...(tab === "emergency" ? S.navTabActive : {}) }} onClick={() => setTab("emergency")}>
+              Emergency
+            </button>
             <button style={{ ...S.navTab, ...(tab === "admin" ? S.navTabActive : {}) }} onClick={() => setTab("admin")}>
               Admin
             </button>
@@ -147,6 +154,10 @@ export default function App() {
       <main style={S.main}>
         {tab === "orders" ? (
           <OrdersPage orders={orders} items={items} />
+        ) : tab === "qrcodes" ? (
+          <QrCodesPage items={items} />
+        ) : tab === "emergency" ? (
+          <EmergencyChecklistPage items={items} />
         ) : tab === "admin" ? (
           <AdminPage
             items={items}
@@ -165,7 +176,6 @@ export default function App() {
               onSave={saveRequester}
               onEdit={editRequester}
             />
-
             <div style={S.scanRow}>
               <button
                 style={{ ...S.scanBtn, ...(canScan ? {} : S.scanBtnDisabled) }}
@@ -178,14 +188,12 @@ export default function App() {
                 {canScan ? "Tap to check items in or out" : "Save your request details above to enable scanning"}
               </div>
             </div>
-
             <div style={S.toolbar}>
               <div style={S.searchWrap}>
                 <Icon.search />
                 <input style={S.searchInput} placeholder="Search items…" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
             </div>
-
             <div style={S.catTabs}>
               {categories.map((c) => (
                 <button
@@ -201,7 +209,6 @@ export default function App() {
                 </button>
               ))}
             </div>
-
             <div style={S.grid}>
               {filteredItems.map((item) => (
                 <ItemCard
@@ -214,7 +221,6 @@ export default function App() {
               ))}
               {filteredItems.length === 0 && <div style={S.emptyState}>No items match your search.</div>}
             </div>
-
             <NotesSection noteDraft={noteDraft} setNoteDraft={setNoteDraft} onSave={saveNote} flash={noteFlash} />
           </>
         )}
@@ -236,9 +242,7 @@ export default function App() {
           onClose={() => setScanOpen(false)}
         />
       )}
-
       {qrItem && <QrModal item={qrItem} onClose={() => setQrItem(null)} />}
-
       {submitOpen && (
         <SubmitModal
           requester={requester}
@@ -251,12 +255,12 @@ export default function App() {
           onClose={() => setSubmitOpen(false)}
         />
       )}
-    </div>
+    </div>ca
   );
 }
 
 function SyncDot({ status }) {
-  const color = status === "green" ? "#2ecc71" : status === "yellow" ? "#f1c40f" : "#e74c3c";
+  const color = status === "green" ? "#2ecc71" : status === "yellow" ? "#f1c40f" : "#e74c3c";a
   const label = status === "green" ? "Synced" : status === "yellow" ? "Syncing…" : "Sync error";
   return (
     <div style={S.syncWrap} title={label}>

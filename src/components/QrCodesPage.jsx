@@ -139,7 +139,7 @@ const qrCardStyle = {
 };
 
 const brandHeaderStyle = {
-  fontSize: 11,
+  fontSize: 15,
   fontWeight: 800,
   letterSpacing: 0.5,
   textTransform: "uppercase",

@@ -260,7 +260,7 @@ export default function App() {
 }
 
 function SyncDot({ status }) {
-  const color = status === "green" ? "#2ecc71" : status === "yellow" ? "#f1c40f" : "#e74c3c";a
+  const color = status === "green" ? "#2ecc71" : status === "yellow" ? "#f1c40f" : "#e74c3c";
   const label = status === "green" ? "Synced" : status === "yellow" ? "Syncing…" : "Sync error";
   return (
     <div style={S.syncWrap} title={label}>

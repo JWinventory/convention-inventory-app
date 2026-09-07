@@ -8,12 +8,6 @@ import { fileToCompressedDataUrl } from "../imageUtils";
 const BLANK_FORM = { name: "", category: "", total: "1", note: "", img: null };
 
 export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty, syncStatus }) {
-  // --- password gate ---
-  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem("adminUnlocked") === "1");
-  const [pw, setPw] = useState("");
-  const [pwError, setPwError] = useState("");
-  const [checking, setChecking] = useState(false);
-
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(null); // null | "new" | item
   const [form, setForm] = useState(BLANK_FORM);
@@ -34,32 +28,6 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
       : items;
     return [...base].sort((a, b) => a.name.localeCompare(b.name));
   }, [items, search]);
-
-  async function handleUnlock(e) {
-    e.preventDefault();
-    if (!pw) return;
-    setChecking(true);
-    setPwError("");
-    try {
-      const res = await fetch("/api/verify-admin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pw }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        sessionStorage.setItem("adminUnlocked", "1");
-        setUnlocked(true);
-      } else {
-        setPwError("Incorrect password.");
-      }
-    } catch (err) {
-      setPwError("Couldn't verify password — check your connection.");
-    } finally {
-      setChecking(false);
-      setPw("");
-    }
-  }
 
   function openNew() {
     setForm(BLANK_FORM);
@@ -128,31 +96,6 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
     if (res.ok) setSeedMsg(`Loaded ${res.count} starter items.`);
     else if (res.reason === "not-empty") setSeedMsg(`Catalog already has ${res.count} items — seed skipped.`);
     else setSeedMsg("Couldn't seed — check your Firebase configuration.");
-  }
-
-  if (!unlocked) {
-    return (
-      <div style={S.card}>
-        <h2 style={S.cardTitle}>Admin Access</h2>
-        <p style={S.tinyMuted}>Enter the admin password to manage the catalog.</p>
-        <form onSubmit={handleUnlock}>
-          <label style={S.fieldLabel}>
-            Password
-            <input
-              style={S.fieldInput}
-              type="password"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              autoFocus
-            />
-          </label>
-          {pwError && <div style={S.errorText}>{pwError}</div>}
-          <button style={S.primaryBtn} type="submit" disabled={checking || !pw}>
-            {checking ? "Checking…" : "Unlock"}
-          </button>
-        </form>
-      </div>
-    );
   }
 
   return (

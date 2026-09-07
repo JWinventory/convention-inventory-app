@@ -255,7 +255,7 @@ export default function App() {
           onClose={() => setSubmitOpen(false)}
         />
       )}
-    </div>ca
+    </div>
   );
 }
 

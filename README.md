@@ -115,3 +115,4 @@ control. Two easy options:
 - **More robust:** add Firebase Authentication (e.g. anonymous or email
   sign-in) and update the Firestore rules to require `request.auth != null`.
   This is a larger change — ask if you'd like help adding it.
+  

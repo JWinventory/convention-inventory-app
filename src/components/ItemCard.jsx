@@ -2,13 +2,16 @@ import React, { useState } from "react";
 import { S, colorFor } from "../styles";
 import { Icon } from "./Icon";
 import { Lightbox } from "./Lightbox";
+import { ImageCarousel } from "./ImageCarousel";
+import { getItemImages } from "../imageUtils";
 
 export function ItemCard({ item, onCheckOut, onCheckIn, onShowQr, adminMode, onEdit, onDelete }) {
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
   const out = item.out || 0;
   const available = item.total - out;
   const fullyOut = available <= 0;
   const color = colorFor(item.category);
+  const images = getItemImages(item);
 
   return (
     <div style={{ ...S.itemCard, ...(fullyOut ? S.itemCardOut : {}) }}>
@@ -19,16 +22,7 @@ export function ItemCard({ item, onCheckOut, onCheckIn, onShowQr, adminMode, onE
         </button>
       )}
       <div style={S.itemImgWrap}>
-        {item.img ? (
-          <img
-            src={item.img}
-            alt={item.name}
-            style={{ ...S.itemImg, cursor: "zoom-in" }}
-            onClick={() => setLightboxOpen(true)}
-          />
-        ) : (
-          <div style={S.itemImgPlaceholder}>No photo</div>
-        )}
+        <ImageCarousel images={images} alt={item.name} onEnlarge={setLightboxSrc} />
       </div>
       <div style={{ ...S.itemCat, color }}>{item.category}</div>
       <div style={S.itemName}>{item.name}</div>
@@ -67,9 +61,7 @@ export function ItemCard({ item, onCheckOut, onCheckIn, onShowQr, adminMode, onE
         </div>
       )}
 
-      {lightboxOpen && item.img && (
-        <Lightbox src={item.img} alt={item.name} onClose={() => setLightboxOpen(false)} />
-      )}
+      {lightboxSrc && <Lightbox src={lightboxSrc} alt={item.name} onClose={() => setLightboxSrc(null)} />}
     </div>
   );
 }

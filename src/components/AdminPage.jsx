@@ -3,9 +3,10 @@ import { S, colorFor } from "../styles";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
 import { Lightbox } from "./Lightbox";
-import { fileToCompressedDataUrl } from "../imageUtils";
+import { ImageCarousel } from "./ImageCarousel";
+import { fileToCompressedDataUrl, getItemImages } from "../imageUtils";
 
-const BLANK_FORM = { name: "", category: "", total: "1", note: "", img: null };
+const BLANK_FORM = { name: "", category: "", total: "1", note: "", images: [] };
 
 export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty, syncStatus }) {
   const [search, setSearch] = useState("");
@@ -39,7 +40,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
       category: item.category,
       total: String(item.total),
       note: item.note || "",
-      img: item.img || null,
+      images: getItemImages(item),
     });
     setEditing(item);
   }
@@ -49,14 +50,20 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
   }
 
   async function handlePhoto(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     try {
-      const dataUrl = await fileToCompressedDataUrl(file);
-      setForm((f) => ({ ...f, img: dataUrl }));
+      const dataUrls = await Promise.all(files.map((f) => fileToCompressedDataUrl(f)));
+      setForm((f) => ({ ...f, images: [...f.images, ...dataUrls] }));
     } catch (err) {
-      alert("Couldn't read that image. Try a different file.");
+      alert("Couldn't read one of those images. Try different files.");
+    } finally {
+      e.target.value = "";
     }
+  }
+
+  function removeImage(idx) {
+    setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
   }
 
   async function handleSave() {
@@ -68,7 +75,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
         category: form.category.trim(),
         total: Number(form.total) || 0,
         note: form.note.trim(),
-        img: form.img,
+        images: form.images,
       };
       if (editing === "new") {
         await addItem(payload);
@@ -133,7 +140,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
             item={item}
             onEdit={() => openEdit(item)}
             onDelete={() => handleDelete(item)}
-            onEnlarge={() => setLightboxSrc(item.img)}
+            onEnlarge={setLightboxSrc}
           />
         ))}
       </div>
@@ -168,25 +175,45 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
             <textarea style={S.textarea} rows={2} value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
           </label>
 
-          <div style={S.photoUploadBox} onClick={() => document.getElementById("photo-input").click()}>
-            {form.img ? (
-              <img
-                src={form.img}
-                alt="preview"
-                style={{ ...S.photoPreview, cursor: "zoom-in" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLightboxSrc(form.img);
-                }}
-              />
-            ) : (
-              <div style={S.tinyMuted}>Tap to upload a photo (optional)</div>
-            )}
-            <div style={{ fontSize: 11, color: "#999" }}>
-              {form.img ? "Tap photo to enlarge, or tap here to replace" : ""}
+          <label style={S.fieldLabel}>Photos (optional)</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+            {form.images.map((src, i) => (
+              <div key={i} style={{ position: "relative" }}>
+                <img
+                  src={src}
+                  alt={`Photo ${i + 1}`}
+                  style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, cursor: "zoom-in" }}
+                  onClick={() => setLightboxSrc(src)}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeImage(i)}
+                  style={removeBadgeStyle}
+                  aria-label={`Remove photo ${i + 1}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 8,
+                border: "2px dashed #d9dce3",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                color: "#999",
+                fontSize: 26,
+              }}
+              onClick={() => document.getElementById("photo-input").click()}
+            >
+              +
             </div>
           </div>
-          <input id="photo-input" type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhoto} />
+          <input id="photo-input" type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handlePhoto} />
 
           <button style={S.primaryBtn} disabled={saving || !form.name.trim() || !form.category.trim()} onClick={handleSave}>
             {saving ? "Saving…" : editing === "new" ? "Add to Catalog" : "Save Changes"}
@@ -201,20 +228,12 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
 
 function AdminItemCard({ item, onEdit, onDelete, onEnlarge }) {
   const color = colorFor(item.category);
+  const images = getItemImages(item);
   return (
     <div style={S.itemCard}>
       <div style={{ ...S.catStripe, background: color }} />
       <div style={S.itemImgWrap}>
-        {item.img ? (
-          <img
-            src={item.img}
-            alt={item.name}
-            style={{ ...S.itemImg, cursor: "zoom-in" }}
-            onClick={onEnlarge}
-          />
-        ) : (
-          <div style={S.itemImgPlaceholder}>No photo</div>
-        )}
+        <ImageCarousel images={images} alt={item.name} onEnlarge={onEnlarge} />
       </div>
       <div style={{ ...S.itemCat, color }}>{item.category}</div>
       <div style={S.itemName}>{item.name}</div>
@@ -230,3 +249,19 @@ function AdminItemCard({ item, onEdit, onDelete, onEnlarge }) {
     </div>
   );
 }
+
+const removeBadgeStyle = {
+  position: "absolute",
+  top: -6,
+  right: -6,
+  width: 20,
+  height: 20,
+  borderRadius: "50%",
+  background: "#c0392b",
+  color: "#fff",
+  border: "2px solid #fff",
+  fontSize: 13,
+  lineHeight: "16px",
+  padding: 0,
+  cursor: "pointer",
+};

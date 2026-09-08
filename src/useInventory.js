@@ -92,12 +92,14 @@ export function useInventory() {
   const addItem = useCallback(async (item) => {
     setSyncStatus("yellow");
     try {
+      const images = Array.isArray(item.images) ? item.images : item.img ? [item.img] : [];
       await addDoc(collection(db, ITEMS_COL), {
         name: item.name,
         category: item.category,
         total: Number(item.total) || 0,
         note: item.note || "",
-        img: item.img || null,
+        images,
+        img: images[0] || null, // kept for backward compatibility with older code paths
         out: 0,
         log: [],
       });
@@ -111,7 +113,11 @@ export function useInventory() {
   const updateItem = useCallback(async (id, patch) => {
     setSyncStatus("yellow");
     try {
-      await updateDoc(doc(db, ITEMS_COL, id), patch);
+      const finalPatch = { ...patch };
+      if (Array.isArray(patch.images)) {
+        finalPatch.img = patch.images[0] || null; // keep in sync for backward compatibility
+      }
+      await updateDoc(doc(db, ITEMS_COL, id), finalPatch);
       setSyncStatus("green");
     } catch (e) {
       setSyncStatus("red");

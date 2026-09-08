@@ -61,3 +61,14 @@ function compressWithFallback(img, maxDim, quality) {
   const canvas = drawToCanvas(img, dimSteps[dimSteps.length - 1]);
   return canvas.toDataURL("image/jpeg", qualitySteps[qualitySteps.length - 1]);
 }
+
+// Returns an item's photos as an array, regardless of whether it was
+// saved with the old single-photo "img" field or the newer "images"
+// array — so older catalog items keep working without needing to be
+// re-edited.
+export function getItemImages(item) {
+  if (!item) return [];
+  if (Array.isArray(item.images) && item.images.length) return item.images;
+  if (item.img) return [item.img];
+  return [];
+}

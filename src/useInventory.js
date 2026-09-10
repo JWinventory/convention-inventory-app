@@ -195,4 +195,37 @@ export function useInventory() {
   const updateOrderStatus = useCallback(async (orderId, status) => {
     setSyncStatus("yellow");
     try {
-      await
+      await updateDoc(doc(db, ORDERS_COL, orderId), { status });
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
+    }
+  }, []);
+
+  const saveNotes = useCallback(async (text) => {
+    setSyncStatus("yellow");
+    try {
+      await setDoc(doc(db, META_DOC), { notes: text, updatedAt: serverTimestamp() }, { merge: true });
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
+    }
+  }, []);
+
+  return {
+    items,
+    orders,
+    notes,
+    loading,
+    syncStatus,
+    ready,
+    seedIfEmpty,
+    addItem,
+    updateItem,
+    deleteItem,
+    applyCheckChange,
+    addOrder,
+    updateOrderStatus,
+    saveNotes,
+  };
+}

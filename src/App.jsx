@@ -5,6 +5,7 @@ import { RequesterForm } from "./components/RequesterForm";
 import { ItemCard } from "./components/ItemCard";
 import { NotesSection } from "./components/NotesSection";
 import { ScanModal } from "./components/ScanModal";
+import { CheckInScanModal } from "./components/CheckInScanModal";
 import { QrModal } from "./components/QrModal";
 import { SubmitModal } from "./components/SubmitModal";
 import { MyOrderStatus } from "./components/MyOrderStatus";
@@ -82,6 +83,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
   const [scanOpen, setScanOpen] = useState(false);
+  const [checkInScanOpen, setCheckInScanOpen] = useState(false);
   const [qrItem, setQrItem] = useState(null);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitEmail, setSubmitEmail] = useState("");
@@ -153,6 +155,12 @@ export default function App() {
       setMyOrderId(null);
     }
   }, [myOrder, myOrderPhase]);
+
+  // If the order finishes while the check-in scanner happens to still be
+  // open for some reason, make sure it closes too.
+  useEffect(() => {
+    if (myOrderPhase !== "ready") setCheckInScanOpen(false);
+  }, [myOrderPhase]);
 
   async function handleOrderCreated(order) {
     const id = await addOrder(order);
@@ -259,7 +267,11 @@ export default function App() {
             onMarkReady={handleMarkOrderReady}
           />
         ) : myOrderPhase !== "none" ? (
-          <MyOrderStatus lineItems={myLineItems} phase={myOrderPhase} onScanCheckIn={() => setScanOpen(true)} />
+          <MyOrderStatus
+            lineItems={myLineItems}
+            phase={myOrderPhase}
+            onScanCheckIn={() => setCheckInScanOpen(true)}
+          />
         ) : (
           <>
             <FindOrderForm onFind={handleFindOrder} />
@@ -334,6 +346,14 @@ export default function App() {
           itemState={Object.fromEntries(items.map((i) => [i.id, { out: i.out || 0 }]))}
           onResolveAction={(id, delta) => applyCheckChange(id, delta, requester.name)}
           onClose={() => setScanOpen(false)}
+        />
+      )}
+      {checkInScanOpen && myOrder && (
+        <CheckInScanModal
+          lineItems={myLineItems}
+          items={items}
+          onResolveAction={(id, delta, note) => applyCheckChange(id, delta, requester.name, note)}
+          onClose={() => setCheckInScanOpen(false)}
         />
       )}
       {qrItem && <QrModal item={qrItem} onClose={() => setQrItem(null)} />}

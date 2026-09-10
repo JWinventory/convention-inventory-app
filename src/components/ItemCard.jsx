@@ -256,5 +256,4 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
         </div>
       )}
     </Modal>
-  );
-}
+ }

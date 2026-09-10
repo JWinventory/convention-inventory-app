@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { Modal } from "./Modal";
+import { Icon } from "./Icon";
 import { S } from "../styles";
 
 const SCANNER_ID = "checkin-camera-region";
@@ -11,17 +12,21 @@ const SCANNER_ID = "checkin-camera-region";
 // away, without ever needing to pick a camera again. A "Missing QR
 // Code?" option lets an item be checked in manually when its code is
 // damaged or missing, but requires a short note before it'll proceed.
+// Once everything's checked in, the camera stops and a completion
+// screen takes over until the requester chooses to leave.
 export function CheckInScanModal({ lineItems, items, onResolveAction, onClose }) {
   const [flash, setFlash] = useState(null); // { text, tone: "ok" | "error" } | null
   const [missingOpen, setMissingOpen] = useState(false);
   const [missingItemName, setMissingItemName] = useState("");
   const [missingNote, setMissingNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [completed, setCompleted] = useState(false);
 
   const lineItemsRef = useRef(lineItems);
   const itemsRef = useRef(items);
   const onResolveActionRef = useRef(onResolveAction);
   const lastScanRef = useRef({ name: null, at: 0 });
+  const scannerInstanceRef = useRef(null);
 
   useEffect(() => {
     lineItemsRef.current = lineItems;
@@ -32,12 +37,23 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   const remaining = lineItems.filter((li) => li.stillOut > 0);
   const allDone = lineItems.length > 0 && remaining.length === 0;
 
-  // Auto-close once everything's checked in.
+  function stopCamera() {
+    const instance = scannerInstanceRef.current;
+    if (!instance) return;
+    instance
+      .stop()
+      .catch(() => {})
+      .finally(() => {
+        instance.clear().catch(() => {});
+      });
+  }
+
+  // Once everything's checked in, stop the camera (no reason to keep it
+  // running) and switch to the completion screen.
   useEffect(() => {
     if (!allDone) return;
-    setFlash({ text: "All items checked in!", tone: "ok" });
-    const t = setTimeout(() => onClose(), 1400);
-    return () => clearTimeout(t);
+    stopCamera();
+    setCompleted(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDone]);
 
@@ -82,7 +98,10 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   }
 
   useEffect(() => {
+    if (completed) return;
+
     const html5Qrcode = new Html5Qrcode(SCANNER_ID);
+    scannerInstanceRef.current = html5Qrcode;
 
     html5Qrcode
       .start(
@@ -100,15 +119,10 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
       });
 
     return () => {
-      html5Qrcode
-        .stop()
-        .catch(() => {})
-        .finally(() => {
-          html5Qrcode.clear().catch(() => {});
-        });
+      stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [completed]);
 
   async function handleManualCheckIn() {
     if (!missingItemName || !missingNote.trim()) return;
@@ -125,6 +139,24 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (completed) {
+    return (
+      <Modal onClose={onClose} title="Check-In Complete">
+        <div style={S.successBox}>
+          <div style={S.successCheck}>
+            <Icon.check size={28} />
+          </div>
+          <div style={S.successTitle}>See you at the next event!</div>
+          <div style={{ fontWeight: 700, color: "#1a1a2e", marginBottom: 10 }}>CEPC-Lubbock</div>
+          <div style={S.tinyMuted}>All your items have been checked in. You may now close this window.</div>
+          <button style={{ ...S.primaryBtn, marginTop: 16 }} onClick={onClose}>
+            Return to Inventory Screen
+          </button>
+        </div>
+      </Modal>
+    );
   }
 
   return (
@@ -174,55 +206,4 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
             ))}
           </div>
 
-          <button style={{ ...S.secondaryBtn, marginTop: 10 }} onClick={() => setMissingOpen(true)}>
-            Missing QR Code?
-          </button>
-        </>
-      )}
-
-      {missingOpen && (
-        <div>
-          <p style={S.modalHint}>
-            Choose the item you're checking in, and add a quick note about why the QR code couldn't be
-            scanned (damaged, missing, etc.) before continuing.
-          </p>
-          <label style={S.fieldLabel}>
-            Item
-            <select
-              style={S.fieldInput}
-              value={missingItemName}
-              onChange={(e) => setMissingItemName(e.target.value)}
-            >
-              <option value="">Select an item…</option>
-              {remaining.map((li) => (
-                <option key={li.name} value={li.name}>
-                  {li.name} ({li.qty - li.stillOut} of {li.qty} checked in)
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={S.fieldLabel}>
-            Why was this checked in manually?
-            <textarea
-              style={S.textarea}
-              rows={3}
-              value={missingNote}
-              onChange={(e) => setMissingNote(e.target.value)}
-              placeholder="e.g. QR sticker fell off during the event"
-            />
-          </label>
-          <button
-            style={S.primaryBtn}
-            disabled={!missingItemName || !missingNote.trim() || submitting}
-            onClick={handleManualCheckIn}
-          >
-            {submitting ? "Checking In…" : "Check In Item"}
-          </button>
-          <button style={S.secondaryBtn} onClick={() => setMissingOpen(false)}>
-            Back to Scanning
-          </button>
-        </div>
-      )}
-    </Modal>
-  );
-}
+          <button style={{

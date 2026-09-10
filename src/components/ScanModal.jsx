@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode";
 import { Modal } from "./Modal";
 import { S } from "../styles";
 
@@ -10,7 +10,8 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
   const [manualText, setManualText] = useState("");
   const [scannedName, setScannedName] = useState(null);
   const [error, setError] = useState("");
-  const scannerRef = useRef(null);
+  const qrRef = useRef(null);
+  const startedRef = useRef(false);
 
   function lookup(payloadText) {
     let payload;
@@ -32,33 +33,39 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
   useEffect(() => {
     if (mode !== "camera" || scannedName) return;
 
-    const scanner = new Html5QrcodeScanner(
-      SCANNER_ID,
-      {
-        fps: 10,
-        qrbox: { width: 220, height: 220 },
-        // Skip the camera-picker UI and go straight to the rear camera —
-        // and only offer the live camera scan type, not a file-upload option,
-        // since the Camera/Type-Paste tabs above already cover manual entry.
-        videoConstraints: { facingMode: { ideal: "environment" } },
-        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-      },
-      false
-    );
-    scannerRef.current = scanner;
+    const qr = new Html5Qrcode(SCANNER_ID);
+    qrRef.current = qr;
+    startedRef.current = false;
 
-    scanner.render(
+    // Using Html5Qrcode directly (rather than Html5QrcodeScanner) skips
+    // that component's built-in camera-picker dropdown entirely — this
+    // just asks the browser for the rear-facing camera directly.
+    qr.start(
+      { facingMode: { ideal: "environment" } },
+      { fps: 10, qrbox: { width: 220, height: 220 } },
       (decodedText) => {
         lookup(decodedText);
-        scanner.pause(true);
+        qr.pause(true);
       },
       () => {
         /* ignore per-frame decode errors */
       }
-    );
+    )
+      .then(() => {
+        startedRef.current = true;
+      })
+      .catch(() => {
+        setError("Couldn't access the camera. Check camera permissions for this site.");
+      });
 
     return () => {
-      scanner.clear().catch(() => {});
+      if (startedRef.current) {
+        qr.stop()
+          .then(() => qr.clear())
+          .catch(() => {});
+      } else {
+        qr.clear().catch(() => {});
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, scannedName]);

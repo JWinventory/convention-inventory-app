@@ -127,7 +127,8 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   async function handleManualCheckIn() {
     if (!missingItemName || !missingNote.trim()) return;
     const li = lineItemsRef.current.find((l) => l.name === missingItemName);
-    const liveItem = itemsRef.current.find((i) => i.name === missingItemName);    if (!li || !liveItem) return;
+    const liveItem = itemsRef.current.find((i) => i.name === missingItemName);
+    if (!li || !liveItem) return;
     setSubmitting(true);
     try {
       await onResolveActionRef.current(liveItem.id, -1, missingNote.trim());

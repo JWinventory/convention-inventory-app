@@ -7,11 +7,13 @@ import { NotesSection } from "./components/NotesSection";
 import { ScanModal } from "./components/ScanModal";
 import { QrModal } from "./components/QrModal";
 import { SubmitModal } from "./components/SubmitModal";
+import { MyOrderStatus } from "./components/MyOrderStatus";
 import { AdminHub } from "./components/AdminHub";
 import { useInventory } from "./useInventory";
 import { firebaseConfigured } from "./firebase";
 
 const REQUESTER_KEY = "convention-inventory-requester";
+const MY_ORDER_KEY = "convention-inventory-my-order-id";
 
 function loadRequester() {
   try {
@@ -21,6 +23,16 @@ function loadRequester() {
     /* ignore */
   }
   return { name: "", phone: "", eventDate: "", pickupDate: "", returnDate: "" };
+}
+
+// Matches each order line item up against the live catalog to see how
+// much of it is still checked out right now.
+function computeLineItems(order, items) {
+  return (order.items || []).map((li) => {
+    const liveItem = items.find((i) => i.name === li.name);
+    const stillOut = liveItem ? Math.min(li.qty, liveItem.out || 0) : 0;
+    return { ...li, stillOut, exists: Boolean(liveItem) };
+  });
 }
 
 export default function App() {
@@ -35,6 +47,7 @@ export default function App() {
     deleteItem,
     applyCheckChange,
     addOrder,
+    updateOrderStatus,
     saveNotes,
   } = useInventory();
 
@@ -53,6 +66,8 @@ export default function App() {
   const [submitNotes, setSubmitNotes] = useState("");
   const [noteDraft, setNoteDraft] = useState(notes);
   const [noteFlash, setNoteFlash] = useState(false);
+
+  const [myOrderId, setMyOrderId] = useState(() => localStorage.getItem(MY_ORDER_KEY) || null);
 
   useEffect(() => setNoteDraft(notes), [notes]);
 
@@ -96,6 +111,52 @@ export default function App() {
     saveNotes(noteDraft);
     setNoteFlash(true);
     setTimeout(() => setNoteFlash(false), 2000);
+  }
+
+  // --- Phase 1-3 order tracking (this browser's own submitted order) ---
+  const myOrder = useMemo(() => orders.find((o) => o.id === myOrderId) || null, [orders, myOrderId]);
+  const myLineItems = useMemo(() => (myOrder ? computeLineItems(myOrder, items) : []), [myOrder, items]);
+  const myOrderPhase = useMemo(() => {
+    if (!myOrder) return "none";
+    const allDone = myLineItems.length > 0 && myLineItems.every((li) => li.stillOut === 0);
+    if (allDone) return "none";
+    return myOrder.status === "fulfilled" ? "ready" : "submitted";
+  }, [myOrder, myLineItems]);
+
+  // Once every item on "my" order is checked back in, stop tracking it
+  // so the screen unlocks and is ready for a new request.
+  useEffect(() => {
+    if (myOrder && myOrderPhase === "none") {
+      localStorage.removeItem(MY_ORDER_KEY);
+      setMyOrderId(null);
+    }
+  }, [myOrder, myOrderPhase]);
+
+  async function handleOrderCreated(order) {
+    const id = await addOrder(order);
+    if (id) {
+      localStorage.setItem(MY_ORDER_KEY, id);
+      setMyOrderId(id);
+    }
+  }
+
+  // Staff-side: flips the order to "fulfilled" and emails the requester
+  // (silently skipped server-side if they didn't leave an email).
+  async function handleMarkOrderReady(order) {
+    await updateOrderStatus(order.id, "fulfilled");
+    try {
+      await fetch("/api/notify-ready", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requesterEmail: order.requesterEmail,
+          requester: { name: order.requesterName, phone: order.requesterPhone },
+          items: order.items,
+        }),
+      });
+    } catch (err) {
+      // Status is already updated even if the email fails to send.
+    }
   }
 
   if (!firebaseConfigured) {
@@ -149,7 +210,10 @@ export default function App() {
             deleteItem={deleteItem}
             seedIfEmpty={seedIfEmpty}
             syncStatus={syncStatus}
+            onMarkReady={handleMarkOrderReady}
           />
+        ) : myOrderPhase !== "none" ? (
+          <MyOrderStatus lineItems={myLineItems} phase={myOrderPhase} onScanCheckIn={() => setScanOpen(true)} />
         ) : (
           <>
             <RequesterForm
@@ -197,8 +261,8 @@ export default function App() {
                 <ItemCard
                   key={item.id}
                   item={item}
-                  onCheckOut={() => applyCheckChange(item.id, 1, requester.name)}
-                  onCheckIn={() => applyCheckChange(item.id, -1, requester.name)}
+                  onCheckOut={(qty) => applyCheckChange(item.id, qty, requester.name)}
+                  onCheckIn={(qty) => applyCheckChange(item.id, -qty, requester.name)}
                   onShowQr={() => setQrItem(item)}
                 />
               ))}
@@ -209,7 +273,7 @@ export default function App() {
         )}
       </main>
 
-      {tab === "inventory" && (
+      {tab === "inventory" && myOrderPhase === "none" && (
         <button style={S.fabSubmit} onClick={() => setSubmitOpen(true)}>
           <Icon.bell />
           <span>Submit &amp; Notify</span>
@@ -234,7 +298,7 @@ export default function App() {
           setEmail={setSubmitEmail}
           notes={submitNotes}
           setNotes={setSubmitNotes}
-          onOrderCreated={addOrder}
+          onOrderCreated={handleOrderCreated}
           onClose={() => setSubmitOpen(false)}
         />
       )}

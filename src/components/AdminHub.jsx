@@ -16,6 +16,7 @@ export function AdminHub({
   deleteItem,
   seedIfEmpty,
   syncStatus,
+  onMarkReady,
 }) {
   const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem("adminUnlocked") === "1");
   const [pw, setPw] = useState("");
@@ -105,7 +106,7 @@ export function AdminHub({
           syncStatus={syncStatus}
         />
       )}
-      {section === "orders" && <OrdersPage orders={orders} items={items} />}
+      {section === "orders" && <OrdersPage orders={orders} items={items} onMarkReady={onMarkReady} />}
       {section === "qrcodes" && <QrCodesPage items={items} />}
       {section === "emergency" && <EmergencyChecklistPage items={items} />}
     </div>

@@ -9,7 +9,9 @@ const BRAND_BLUE = "#0072CE";
 // Lists every item's QR code in a grid, with a Print button, plus a
 // generator at the top for creating a one-off QR code from any text
 // or URL (not tied to a catalog item). All codes are branded with a
-// "CEPC-Lubbock" header and rendered in the brand blue.
+// "CEPC-Lubbock" header and rendered in the brand blue. Cards are
+// spaced apart with a dashed cut-line so they're easy to scan without
+// interference and easy to trim apart if printed on sticker paper.
 export function QrCodesPage({ items }) {
   const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -115,7 +117,6 @@ export function QrCodesPage({ items }) {
           .qr-print-card {
             page-break-inside: avoid;
             box-shadow: none !important;
-            border: 1px solid #ccc;
           }
         }
       `}</style>
@@ -126,16 +127,17 @@ export function QrCodesPage({ items }) {
 const qrGridStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-  gap: 14,
-  marginTop: 10,
+  gap: 32,
+  marginTop: 14,
 };
 
 const qrCardStyle = {
   background: "#fff",
   borderRadius: 10,
-  padding: 12,
+  padding: 14,
   textAlign: "center",
   boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+  border: "1px dashed #bbb",
 };
 
 const brandHeaderStyle = {

@@ -1,231 +1,228 @@
-import { useState, useEffect, useCallback } from "react";
-import {
-  collection,
-  doc,
-  onSnapshot,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  setDoc,
-  getDocs,
-  getDoc,
-  query,
-  orderBy,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db, firebaseConfigured } from "./firebase";
-import { SEED_ITEMS } from "./seedData";
+import React, { useEffect, useRef, useState } from "react";
+import { Html5Qrcode } from "html5-qrcode";
+import { Modal } from "./Modal";
+import { S } from "../styles";
 
-const ITEMS_COL = "items";
-const ORDERS_COL = "orders";
-const META_DOC = "meta/shared";
+const SCANNER_ID = "checkin-camera-region";
 
-export function useInventory() {
-  const [items, setItems] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState("yellow"); // green | yellow | red
-  const [ready, setReady] = useState(false);
+// A streamlined, check-in-only scanner for Phase 3: scan an item's QR
+// code and it's checked in automatically — no buttons, no confirmation
+// — and the camera keeps running so the next item can be scanned right
+// away, without ever needing to pick a camera again. A "Missing QR
+// Code?" option lets an item be checked in manually when its code is
+// damaged or missing, but requires a short note before it'll proceed.
+export function CheckInScanModal({ lineItems, items, onResolveAction, onClose }) {
+  const [flash, setFlash] = useState(null); // { text, tone: "ok" | "error" } | null
+  const [missingOpen, setMissingOpen] = useState(false);
+  const [missingItemName, setMissingItemName] = useState("");
+  const [missingNote, setMissingNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  // live items
+  const lineItemsRef = useRef(lineItems);
+  const itemsRef = useRef(items);
+  const onResolveActionRef = useRef(onResolveAction);
+  const lastScanRef = useRef({ name: null, at: 0 });
+
   useEffect(() => {
-    if (!firebaseConfigured) {
-      setSyncStatus("red");
-      setLoading(false);
+    lineItemsRef.current = lineItems;
+    itemsRef.current = items;
+    onResolveActionRef.current = onResolveAction;
+  }, [lineItems, items, onResolveAction]);
+
+  const remaining = lineItems.filter((li) => li.stillOut > 0);
+  const allDone = lineItems.length > 0 && remaining.length === 0;
+
+  // Auto-close once everything's checked in.
+  useEffect(() => {
+    if (!allDone) return;
+    setFlash({ text: "All items checked in!", tone: "ok" });
+    const t = setTimeout(() => onClose(), 1400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allDone]);
+
+  function showFlash(text, tone) {
+    setFlash({ text, tone });
+    setTimeout(() => setFlash((f) => (f && f.text === text ? null : f)), 1400);
+  }
+
+  async function handleDecoded(decodedText) {
+    let payload;
+    try {
+      payload = JSON.parse(decodedText.trim());
+    } catch (e) {
+      showFlash("That QR code isn't recognized.", "error");
       return;
     }
-    const q = query(collection(db, ITEMS_COL), orderBy("category"));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const next = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setItems(next);
-        setLoading(false);
-        setSyncStatus("green");
-        setReady(true);
-      },
-      () => setSyncStatus("red")
-    );
-    return () => unsub();
-  }, []);
 
-  // live orders (submitted equipment requests)
+    const name = payload.name;
+    const now = Date.now();
+    if (lastScanRef.current.name === name && now - lastScanRef.current.at < 2500) {
+      return; // debounce repeat reads of the same code while it's still in frame
+    }
+    lastScanRef.current = { name, at: now };
+
+    const li = lineItemsRef.current.find((l) => l.name === name);
+    if (!li) {
+      showFlash("That item isn't part of this order.", "error");
+      return;
+    }
+    if (li.stillOut <= 0) {
+      showFlash(`${name} is already checked in.`, "ok");
+      return;
+    }
+    const liveItem = itemsRef.current.find((i) => i.name === name);
+    if (!liveItem) {
+      showFlash("That item couldn't be found in the catalog.", "error");
+      return;
+    }
+
+    await onResolveActionRef.current(liveItem.id, -1);
+    showFlash(`Checked in: ${name}`, "ok");
+  }
+
   useEffect(() => {
-    if (!firebaseConfigured) return;
-    const q = query(collection(db, ORDERS_COL), orderBy("createdAtMs", "desc"));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      () => {}
-    );
-    return () => unsub();
-  }, []);
+    const html5Qrcode = new Html5Qrcode(SCANNER_ID);
 
-  // live shared notes
-  useEffect(() => {
-    if (!firebaseConfigured) return;
-    const ref = doc(db, META_DOC);
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        if (snap.exists()) setNotes(snap.data().notes || "");
-      },
-      () => {}
-    );
-    return () => unsub();
-  }, []);
-
-  const seedIfEmpty = useCallback(async () => {
-    if (!firebaseConfigured) return { ok: false, reason: "not-configured" };
-    const snap = await getDocs(collection(db, ITEMS_COL));
-    if (!snap.empty) return { ok: false, reason: "not-empty", count: snap.size };
-    for (const item of SEED_ITEMS) {
-      // eslint-disable-next-line no-await-in-loop
-      await addDoc(collection(db, ITEMS_COL), item);
-    }
-    return { ok: true, count: SEED_ITEMS.length };
-  }, []);
-
-  const addItem = useCallback(async (item) => {
-    setSyncStatus("yellow");
-    try {
-      const images = Array.isArray(item.images) ? item.images : item.img ? [item.img] : [];
-      await addDoc(collection(db, ITEMS_COL), {
-        name: item.name,
-        category: item.category,
-        total: Number(item.total) || 0,
-        note: item.note || "",
-        images,
-        img: images[0] || null, // kept for backward compatibility with older code paths
-        out: 0,
-        log: [],
+    html5Qrcode
+      .start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (decodedText) => {
+          handleDecoded(decodedText);
+        },
+        () => {
+          /* ignore per-frame decode errors */
+        }
+      )
+      .catch(() => {
+        showFlash("Couldn't access the camera. Check camera permissions for this site.", "error");
       });
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-      throw e;
-    }
+
+    return () => {
+      html5Qrcode
+        .stop()
+        .catch(() => {})
+        .finally(() => {
+          html5Qrcode.clear().catch(() => {});
+        });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const updateItem = useCallback(async (id, patch) => {
-    setSyncStatus("yellow");
+  async function handleManualCheckIn() {
+    if (!missingItemName || !missingNote.trim()) return;
+    const li = lineItemsRef.current.find((l) => l.name === missingItemName);
+    const liveItem = itemsRef.current.find((i) => i.name === missingItemName);
+    if (!li || !liveItem) return;
+    setSubmitting(true);
     try {
-      const finalPatch = { ...patch };
-      if (Array.isArray(patch.images)) {
-        finalPatch.img = patch.images[0] || null; // keep in sync for backward compatibility
-      }
-      await updateDoc(doc(db, ITEMS_COL, id), finalPatch);
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-      throw e;
+      await onResolveActionRef.current(liveItem.id, -1, missingNote.trim());
+      showFlash(`Checked in: ${missingItemName}`, "ok");
+      setMissingOpen(false);
+      setMissingItemName("");
+      setMissingNote("");
+    } finally {
+      setSubmitting(false);
     }
-  }, []);
+  }
 
-  const deleteItem = useCallback(async (id) => {
-    setSyncStatus("yellow");
-    try {
-      await deleteDoc(doc(db, ITEMS_COL, id));
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-      throw e;
-    }
-  }, []);
+  return (
+    <Modal onClose={onClose} title="Scan to Check In">
+      {!missingOpen && (
+        <p style={S.modalHint}>
+          Point the camera at each item's QR code — it checks in automatically and moves on to the next
+          one, no need to tap anything.
+        </p>
+      )}
 
-  // note is optional — set when an item is checked in manually because
-  // its QR code was missing or damaged, so there's a record of why.
-  const applyCheckChange = useCallback(async (id, delta, who, note) => {
-    setSyncStatus("yellow");
-    try {
-      const ref = doc(db, ITEMS_COL, id);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return;
-      const data = snap.data();
-      let nextOut = (data.out || 0) + delta;
-      if (nextOut < 0) nextOut = 0;
-      if (nextOut > data.total) nextOut = data.total;
-      const entry = {
-        who: who || "Unnamed volunteer",
-        action: delta > 0 ? "Checked OUT" : "Checked IN",
-        qty: Math.abs(delta),
-        at: new Date().toLocaleString(),
-        ...(note ? { note } : {}),
-      };
-      const nextLog = [entry, ...(data.log || [])].slice(0, 25);
-      await updateDoc(ref, { out: nextOut, log: nextLog });
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-    }
-  }, []);
+      {/* The camera view stays mounted the whole time (just hidden while the
+          Missing QR form is open) so it never needs to reconnect. */}
+      <div style={{ position: "relative" }}>
+        <div id={SCANNER_ID} style={missingOpen ? { display: "none" } : undefined} />
+        {flash && !missingOpen && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 8,
+              left: 8,
+              right: 8,
+              textAlign: "center",
+              padding: "8px 10px",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#fff",
+              background: flash.tone === "error" ? "#c0392b" : "#1e8449",
+            }}
+          >
+            {flash.text}
+          </div>
+        )}
+      </div>
 
-  // Creates the order and returns its new id, so the requester's own
-  // browser can track "this is my order" through the fulfillment/
-  // check-in phases. Starts life with status "submitted".
-  const addOrder = useCallback(async (order) => {
-    setSyncStatus("yellow");
-    try {
-      const ref = await addDoc(collection(db, ORDERS_COL), {
-        requesterName: order.requester.name || "",
-        requesterPhone: order.requester.phone || "",
-        requesterEmail: order.requesterEmail || "",
-        eventDate: order.requester.eventDate || "",
-        pickupDate: order.requester.pickupDate || "",
-        returnDate: order.requester.returnDate || "",
-        items: order.items, // [{ name, qty }]
-        notes: order.notes || "",
-        status: "submitted", // submitted -> fulfilled (then "completed" is derived once items are checked back in)
-        createdAtMs: Date.now(),
-        createdAtLabel: new Date().toLocaleString(),
-      });
-      setSyncStatus("green");
-      return ref.id;
-    } catch (e) {
-      setSyncStatus("red");
-      return null;
-    }
-  }, []);
+      {!missingOpen && (
+        <>
+          <div style={{ ...S.summaryListWrap, marginTop: 12 }}>
+            {lineItems.map((li, idx) => (
+              <div key={idx} style={S.summaryRow}>
+                <span>{li.name}</span>
+                <span style={S.summaryQty}>
+                  {li.qty - li.stillOut} of {li.qty} checked in
+                </span>
+              </div>
+            ))}
+          </div>
 
-  // Flips an order's status (e.g. "submitted" -> "fulfilled" when
-  // staff have gathered the items and are ready to notify the requester).
-  const updateOrderStatus = useCallback(async (orderId, status) => {
-    setSyncStatus("yellow");
-    try {
-      await updateDoc(doc(db, ORDERS_COL, orderId), { status });
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-    }
-  }, []);
+          <button style={{ ...S.secondaryBtn, marginTop: 10 }} onClick={() => setMissingOpen(true)}>
+            Missing QR Code?
+          </button>
+        </>
+      )}
 
-  const saveNotes = useCallback(async (text) => {
-    setSyncStatus("yellow");
-    try {
-      await setDoc(doc(db, META_DOC), { notes: text, updatedAt: serverTimestamp() }, { merge: true });
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-    }
-  }, []);
-
-  return {
-    items,
-    orders,
-    notes,
-    loading,
-    syncStatus,
-    ready,
-    seedIfEmpty,
-    addItem,
-    updateItem,
-    deleteItem,
-    applyCheckChange,
-    addOrder,
-    updateOrderStatus,
-    saveNotes,
-  };
+      {missingOpen && (
+        <div>
+          <p style={S.modalHint}>
+            Choose the item you're checking in, and add a quick note about why the QR code couldn't be
+            scanned (damaged, missing, etc.) before continuing.
+          </p>
+          <label style={S.fieldLabel}>
+            Item
+            <select
+              style={S.fieldInput}
+              value={missingItemName}
+              onChange={(e) => setMissingItemName(e.target.value)}
+            >
+              <option value="">Select an item…</option>
+              {remaining.map((li) => (
+                <option key={li.name} value={li.name}>
+                  {li.name} ({li.qty - li.stillOut} of {li.qty} checked in)
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={S.fieldLabel}>
+            Why was this checked in manually?
+            <textarea
+              style={S.textarea}
+              rows={3}
+              value={missingNote}
+              onChange={(e) => setMissingNote(e.target.value)}
+              placeholder="e.g. QR sticker fell off during the event"
+            />
+          </label>
+          <button
+            style={S.primaryBtn}
+            disabled={!missingItemName || !missingNote.trim() || submitting}
+            onClick={handleManualCheckIn}
+          >
+            {submitting ? "Checking In…" : "Check In Item"}
+          </button>
+          <button style={S.secondaryBtn} onClick={() => setMissingOpen(false)}>
+            Back to Scanning
+          </button>
+        </div>
+      )}
+    </Modal>
+  );
 }

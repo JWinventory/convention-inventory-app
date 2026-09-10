@@ -206,4 +206,55 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
             ))}
           </div>
 
-          <button style={{
+          <button style={{ ...S.secondaryBtn, marginTop: 10 }} onClick={() => setMissingOpen(true)}>
+            Missing QR Code?
+          </button>
+        </>
+      )}
+
+      {missingOpen && (
+        <div>
+          <p style={S.modalHint}>
+            Choose the item you're checking in, and add a quick note about why the QR code couldn't be
+            scanned (damaged, missing, etc.) before continuing.
+          </p>
+          <label style={S.fieldLabel}>
+            Item
+            <select
+              style={S.fieldInput}
+              value={missingItemName}
+              onChange={(e) => setMissingItemName(e.target.value)}
+            >
+              <option value="">Select an item…</option>
+              {remaining.map((li) => (
+                <option key={li.name} value={li.name}>
+                  {li.name} ({li.qty - li.stillOut} of {li.qty} checked in)
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={S.fieldLabel}>
+            Why was this checked in manually?
+            <textarea
+              style={S.textarea}
+              rows={3}
+              value={missingNote}
+              onChange={(e) => setMissingNote(e.target.value)}
+              placeholder="e.g. QR sticker fell off during the event"
+            />
+          </label>
+          <button
+            style={S.primaryBtn}
+            disabled={!missingItemName || !missingNote.trim() || submitting}
+            onClick={handleManualCheckIn}
+          >
+            {submitting ? "Checking In…" : "Check In Item"}
+          </button>
+          <button style={S.secondaryBtn} onClick={() => setMissingOpen(false)}>
+            Back to Scanning
+          </button>
+        </div>
+      )}
+    </Modal>
+  );
+}

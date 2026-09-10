@@ -8,6 +8,7 @@ import { ScanModal } from "./components/ScanModal";
 import { QrModal } from "./components/QrModal";
 import { SubmitModal } from "./components/SubmitModal";
 import { MyOrderStatus } from "./components/MyOrderStatus";
+import { FindOrderForm } from "./components/FindOrderForm";
 import { AdminHub } from "./components/AdminHub";
 import { useInventory } from "./useInventory";
 import { firebaseConfigured } from "./firebase";
@@ -33,6 +34,27 @@ function computeLineItems(order, items) {
     const stillOut = liveItem ? Math.min(li.qty, liveItem.out || 0) : 0;
     return { ...li, stillOut, exists: Boolean(liveItem) };
   });
+}
+
+// Finds the most recent still-active order whose phone or email
+// matches the query, so a requester can pick up their order on a
+// different device than the one they submitted from. Orders are
+// already sorted newest-first by the live query in useInventory.
+function findMyOrder(orders, items, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  const qDigits = q.replace(/\D/g, "");
+
+  const matches = orders.filter((o) => {
+    const phoneDigits = (o.requesterPhone || "").replace(/\D/g, "");
+    const email = (o.requesterEmail || "").toLowerCase();
+    const phoneMatch = qDigits.length >= 7 && phoneDigits === qDigits;
+    const emailMatch = q.includes("@") && email === q;
+    return phoneMatch || emailMatch;
+  });
+
+  const active = matches.filter((o) => computeLineItems(o, items).some((li) => li.stillOut > 0));
+  return active[0] || null;
 }
 
 export default function App() {
@@ -140,6 +162,30 @@ export default function App() {
     }
   }
 
+  // Cross-device lookup: a requester who submitted on another device
+  // can find their in-progress order here by phone or email, and pick
+  // it up on this one too.
+  function handleFindOrder(query) {
+    const found = findMyOrder(orders, items, query);
+    if (!found) return false;
+
+    localStorage.setItem(MY_ORDER_KEY, found.id);
+    setMyOrderId(found.id);
+
+    const foundRequester = {
+      name: found.requesterName || "",
+      phone: found.requesterPhone || "",
+      eventDate: found.eventDate || "",
+      pickupDate: found.pickupDate || "",
+      returnDate: found.returnDate || "",
+    };
+    setRequester(foundRequester);
+    localStorage.setItem(REQUESTER_KEY, JSON.stringify(foundRequester));
+    setRequesterLocked(true);
+
+    return true;
+  }
+
   // Staff-side: flips the order to "fulfilled" and emails the requester
   // (silently skipped server-side if they didn't leave an email).
   async function handleMarkOrderReady(order) {
@@ -216,6 +262,7 @@ export default function App() {
           <MyOrderStatus lineItems={myLineItems} phase={myOrderPhase} onScanCheckIn={() => setScanOpen(true)} />
         ) : (
           <>
+            <FindOrderForm onFind={handleFindOrder} />
             <RequesterForm
               requester={requester}
               setRequester={setRequester}

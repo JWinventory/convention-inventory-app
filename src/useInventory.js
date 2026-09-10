@@ -136,7 +136,9 @@ export function useInventory() {
     }
   }, []);
 
-  const applyCheckChange = useCallback(async (id, delta, who) => {
+  // note is optional — set when an item is checked in manually because
+  // its QR code was missing or damaged, so there's a record of why.
+  const applyCheckChange = useCallback(async (id, delta, who, note) => {
     setSyncStatus("yellow");
     try {
       const ref = doc(db, ITEMS_COL, id);
@@ -151,6 +153,7 @@ export function useInventory() {
         action: delta > 0 ? "Checked OUT" : "Checked IN",
         qty: Math.abs(delta),
         at: new Date().toLocaleString(),
+        ...(note ? { note } : {}),
       };
       const nextLog = [entry, ...(data.log || [])].slice(0, 25);
       await updateDoc(ref, { out: nextOut, log: nextLog });
@@ -192,37 +195,4 @@ export function useInventory() {
   const updateOrderStatus = useCallback(async (orderId, status) => {
     setSyncStatus("yellow");
     try {
-      await updateDoc(doc(db, ORDERS_COL, orderId), { status });
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-    }
-  }, []);
-
-  const saveNotes = useCallback(async (text) => {
-    setSyncStatus("yellow");
-    try {
-      await setDoc(doc(db, META_DOC), { notes: text, updatedAt: serverTimestamp() }, { merge: true });
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-    }
-  }, []);
-
-  return {
-    items,
-    orders,
-    notes,
-    loading,
-    syncStatus,
-    ready,
-    seedIfEmpty,
-    addItem,
-    updateItem,
-    deleteItem,
-    applyCheckChange,
-    addOrder,
-    updateOrderStatus,
-    saveNotes,
-  };
-}
+      await

@@ -10,8 +10,7 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
   const [manualText, setManualText] = useState("");
   const [scannedName, setScannedName] = useState(null);
   const [error, setError] = useState("");
-  const qrRef = useRef(null);
-  const startedRef = useRef(false);
+  const scannerRef = useRef(null);
 
   function lookup(payloadText) {
     let payload;
@@ -33,41 +32,36 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
   useEffect(() => {
     if (mode !== "camera" || scannedName) return;
 
-    const qr = new Html5Qrcode(SCANNER_ID);
-    qrRef.current = qr;
-    startedRef.current = false;
+    // Talk to the camera directly (instead of the library's built-in
+    // scanner UI) so it just opens the rear camera itself, with no
+    // "select a camera" picker of any kind.
+    const html5Qrcode = new Html5Qrcode(SCANNER_ID);
+    scannerRef.current = html5Qrcode;
 
-    // Using Html5Qrcode directly (rather than Html5QrcodeScanner) skips
-    // that component's built-in camera-picker dropdown entirely — this
-    // just asks the browser for the rear-facing camera directly.
-    qr.start(
-      { facingMode: { ideal: "environment" } },
-      { fps: 10, qrbox: { width: 220, height: 220 } },
-      (decodedText) => {
-        lookup(decodedText);
-        qr.pause(true);
-      },
-      () => {
-        /* ignore per-frame decode errors */
-      }
-    )
-      .then(() => {
-        startedRef.current = true;
-      })
+    html5Qrcode
+      .start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (decodedText) => {
+          lookup(decodedText);
+          html5Qrcode.pause(true);
+        },
+        () => {
+          /* ignore per-frame decode errors */
+        }
+      )
       .catch(() => {
         setError("Couldn't access the camera. Check camera permissions for this site.");
       });
 
     return () => {
-      if (startedRef.current) {
-        qr.stop()
-          .then(() => qr.clear())
-          .catch(() => {});
-      } else {
-        qr.clear().catch(() => {});
-      }
+      html5Qrcode
+        .stop()
+        .catch(() => {})
+        .finally(() => {
+          html5Qrcode.clear().catch(() => {});
+        });
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, scannedName]);
 
   // Always look up the live item + counts fresh on every render, so repeated

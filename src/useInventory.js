@@ -160,10 +160,13 @@ export function useInventory() {
     }
   }, []);
 
+  // Creates the order and returns its new id, so the requester's own
+  // browser can track "this is my order" through the fulfillment/
+  // check-in phases. Starts life with status "submitted".
   const addOrder = useCallback(async (order) => {
     setSyncStatus("yellow");
     try {
-      await addDoc(collection(db, ORDERS_COL), {
+      const ref = await addDoc(collection(db, ORDERS_COL), {
         requesterName: order.requester.name || "",
         requesterPhone: order.requester.phone || "",
         requesterEmail: order.requesterEmail || "",
@@ -172,9 +175,24 @@ export function useInventory() {
         returnDate: order.requester.returnDate || "",
         items: order.items, // [{ name, qty }]
         notes: order.notes || "",
+        status: "submitted", // submitted -> fulfilled (then "completed" is derived once items are checked back in)
         createdAtMs: Date.now(),
         createdAtLabel: new Date().toLocaleString(),
       });
+      setSyncStatus("green");
+      return ref.id;
+    } catch (e) {
+      setSyncStatus("red");
+      return null;
+    }
+  }, []);
+
+  // Flips an order's status (e.g. "submitted" -> "fulfilled" when
+  // staff have gathered the items and are ready to notify the requester).
+  const updateOrderStatus = useCallback(async (orderId, status) => {
+    setSyncStatus("yellow");
+    try {
+      await updateDoc(doc(db, ORDERS_COL, orderId), { status });
       setSyncStatus("green");
     } catch (e) {
       setSyncStatus("red");
@@ -204,6 +222,7 @@ export function useInventory() {
     deleteItem,
     applyCheckChange,
     addOrder,
+    updateOrderStatus,
     saveNotes,
   };
 }

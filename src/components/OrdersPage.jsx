@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { S } from "../styles";
 
-export function OrdersPage({ orders, items }) {
+export function OrdersPage({ orders, items, onMarkReady }) {
   const [search, setSearch] = useState("");
 
   // For each order, look up the *current* out-count for every item it listed
@@ -16,7 +16,8 @@ export function OrdersPage({ orders, items }) {
         return { ...li, stillOut, exists: Boolean(liveItem) };
       });
       const isActive = lineItems.some((li) => li.stillOut > 0);
-      return { ...order, lineItems, isActive };
+      const status = order.status || "submitted";
+      return { ...order, lineItems, isActive, status };
     });
   }, [orders, items]);
 
@@ -38,9 +39,9 @@ export function OrdersPage({ orders, items }) {
       <div style={S.card}>
         <h2 style={S.cardTitle}>Orders</h2>
         <div style={S.tinyMuted}>
-          Every submitted request, kept here permanently. An order is tagged Active while any of
-          its items are still checked out, and flips to Completed once everything's back in — you
-          can always scroll back to look at old ones.
+          Every submitted request, kept here permanently. Mark a request Ready once it's been gathered —
+          this emails the requester and unlocks their check-in screen. An order flips to Completed once
+          everything's back in.
         </div>
       </div>
 
@@ -62,7 +63,7 @@ export function OrdersPage({ orders, items }) {
         </div>
       )}
       {activeOrders.map((order) => (
-        <OrderCard key={order.id} order={order} />
+        <OrderCard key={order.id} order={order} onMarkReady={onMarkReady} />
       ))}
 
       <h3 style={{ ...S.cardTitle, marginTop: 24 }}>Completed ({completedOrders.length})</h3>
@@ -72,13 +73,24 @@ export function OrdersPage({ orders, items }) {
         </div>
       )}
       {completedOrders.map((order) => (
-        <OrderCard key={order.id} order={order} />
+        <OrderCard key={order.id} order={order} onMarkReady={onMarkReady} />
       ))}
     </div>
   );
 }
 
-function OrderCard({ order }) {
+function OrderCard({ order, onMarkReady }) {
+  const [sending, setSending] = useState(false);
+
+  async function handleMarkReady() {
+    setSending(true);
+    try {
+      await onMarkReady(order);
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <div style={S.card}>
       <div style={S.cardHeaderRow}>
@@ -87,7 +99,7 @@ function OrderCard({ order }) {
             <span style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e" }}>
               {order.requesterName || "Unnamed requester"}
             </span>
-            <StatusTag active={order.isActive} />
+            <StatusTag active={order.isActive} status={order.status} />
           </div>
           <div style={S.tinyMuted}>
             {order.requesterPhone || "—"}
@@ -120,14 +132,28 @@ function OrderCard({ order }) {
           <strong>Notes:</strong> {order.notes}
         </div>
       )}
+
+      {order.isActive && order.status === "submitted" && (
+        <button style={{ ...S.primaryBtn, marginTop: 10 }} disabled={sending} onClick={handleMarkReady}>
+          {sending ? "Marking Ready…" : "Mark Ready & Notify Requester"}
+        </button>
+      )}
     </div>
   );
 }
 
-function StatusTag({ active }) {
-  const style = active
-    ? { background: "#fdecea", color: "#c0392b" }
-    : { background: "#e9f9ef", color: "#1e8449" };
+function StatusTag({ active, status }) {
+  let label = "Completed";
+  let style = { background: "#e9f9ef", color: "#1e8449" };
+  if (active) {
+    if (status === "fulfilled") {
+      label = "Ready for Pickup";
+      style = { background: "#eaf3fc", color: "#2471a3" };
+    } else {
+      label = "Preparing";
+      style = { background: "#fdecea", color: "#c0392b" };
+    }
+  }
   return (
     <span
       style={{
@@ -140,7 +166,7 @@ function StatusTag({ active }) {
         letterSpacing: 0.3,
       }}
     >
-      {active ? "Active" : "Completed"}
+      {label}
     </span>
   );
 }

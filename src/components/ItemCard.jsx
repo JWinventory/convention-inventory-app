@@ -5,13 +5,17 @@ import { Lightbox } from "./Lightbox";
 import { ImageCarousel } from "./ImageCarousel";
 import { getItemImages } from "../imageUtils";
 
-export function ItemCard({ item, onCheckOut, onCheckIn, onShowQr, adminMode, onEdit, onDelete }) {
+export function ItemCard({ item, onCheckOut, onShowQr, adminMode, onEdit, onDelete }) {
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const out = item.out || 0;
   const available = item.total - out;
   const fullyOut = available <= 0;
   const color = colorFor(item.category);
   const images = getItemImages(item);
+
+  const [outQty, setOutQty] = useState(1);
+  const outMax = Math.max(available, 1);
+  const safeOutQty = Math.min(outQty, outMax);
 
   return (
     <div style={{ ...S.itemCard, ...(fullyOut ? S.itemCardOut : {}) }}>
@@ -27,27 +31,32 @@ export function ItemCard({ item, onCheckOut, onCheckIn, onShowQr, adminMode, onE
       <div style={{ ...S.itemCat, color }}>{item.category}</div>
       <div style={S.itemName}>{item.name}</div>
       {item.note && <div style={S.itemNote}>{item.note}</div>}
-      <div style={S.countRow}>
-        <Count label="Total" value={item.total} />
-        <Count label="Out" value={out} />
-        <Count label="Available" value={available} highlight={!fullyOut} />
+
+      <div style={S.availableRow}>
+        <span style={S.availableCount}>{available}</span>
+        <span style={S.availableLabel}> of {item.total} available</span>
       </div>
 
       {!adminMode ? (
-        <div style={S.btnRow}>
-          <button
-            style={{ ...S.outBtn, ...(available <= 0 ? S.btnDisabled : {}) }}
+        <div style={S.qtyRow}>
+          <select
+            style={S.qtySelect}
+            value={safeOutQty}
+            onChange={(e) => setOutQty(Number(e.target.value))}
             disabled={available <= 0}
-            onClick={onCheckOut}
+          >
+            {Array.from({ length: outMax }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <button
+            style={{ ...S.outBtn, flex: 1, ...(available <= 0 ? S.btnDisabled : {}) }}
+            disabled={available <= 0}
+            onClick={() => onCheckOut(safeOutQty)}
           >
             Check Out
-          </button>
-          <button
-            style={{ ...S.inBtn, ...(out <= 0 ? S.btnDisabled : {}) }}
-            disabled={out <= 0}
-            onClick={onCheckIn}
-          >
-            Check In
           </button>
         </div>
       ) : (
@@ -62,15 +71,6 @@ export function ItemCard({ item, onCheckOut, onCheckIn, onShowQr, adminMode, onE
       )}
 
       {lightboxSrc && <Lightbox src={lightboxSrc} alt={item.name} onClose={() => setLightboxSrc(null)} />}
-    </div>
-  );
-}
-
-function Count({ label, value, highlight }) {
-  return (
-    <div style={S.countBox}>
-      <div style={{ ...S.countVal, ...(highlight ? { color: "#1a1a2e" } : {}) }}>{value}</div>
-      <div style={S.countLabel}>{label}</div>
     </div>
   );
 }

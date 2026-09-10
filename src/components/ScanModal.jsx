@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 import { Modal } from "./Modal";
 import { S } from "../styles";
 
@@ -31,12 +31,22 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
 
   useEffect(() => {
     if (mode !== "camera" || scannedName) return;
+
     const scanner = new Html5QrcodeScanner(
       SCANNER_ID,
-      { fps: 10, qrbox: { width: 220, height: 220 } },
+      {
+        fps: 10,
+        qrbox: { width: 220, height: 220 },
+        // Skip the camera-picker UI and go straight to the rear camera —
+        // and only offer the live camera scan type, not a file-upload option,
+        // since the Camera/Type-Paste tabs above already cover manual entry.
+        videoConstraints: { facingMode: { ideal: "environment" } },
+        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+      },
       false
     );
     scannerRef.current = scanner;
+
     scanner.render(
       (decodedText) => {
         lookup(decodedText);
@@ -46,6 +56,7 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
         /* ignore per-frame decode errors */
       }
     );
+
     return () => {
       scanner.clear().catch(() => {});
     };
@@ -132,13 +143,11 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
         <div style={S.scanResult}>
           <div style={S.scanResultName}>{liveItem.name}</div>
           <div style={S.scanResultCat}>{liveItem.category}</div>
-
           <div style={S.countRow}>
             <CountMini label="Total" value={liveItem.total} />
             <CountMini label="Out" value={out} />
             <CountMini label="Available" value={available} />
           </div>
-
           <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
             <button
               style={{
@@ -169,12 +178,10 @@ export function ScanModal({ items, itemState, onResolveAction, onClose }) {
               + Check In
             </button>
           </div>
-
           <div style={S.tinyMuted}>
             Tap either button as many times as you need — it stays on this item so you can
             check out or in multiple units at once.
           </div>
-
           <button style={S.secondaryBtn} onClick={resetScanner}>
             Scan another item
           </button>

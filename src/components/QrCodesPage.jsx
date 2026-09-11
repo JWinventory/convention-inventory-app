@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { QRBox } from "./QRBox";
 import { S, NAVY } from "../styles";
 
@@ -6,69 +6,61 @@ import { S, NAVY } from "../styles";
 // it controls the color of every QR code on this page.
 const BRAND_BLUE = "#0072CE";
 
-function clearPrintOnly() {
-  document.querySelectorAll(".qr-print-card.qr-print-only").forEach((el) => el.classList.remove("qr-print-only"));
+function clearPrintMarks() {
+  document.querySelectorAll(".qr-print-only, .qr-print-only-group").forEach((el) => {
+    el.classList.remove("qr-print-only", "qr-print-only-group");
+  });
 }
 
-// Marks just one card for printing (via a temporary class + CSS :has()
-// rule) so a single QR code can be printed on its own, without pulling
-// in every other card on the page.
-function handlePrintOne(key) {
-  clearPrintOnly();
+// Prints every code on the page, across every item, regardless of
+// which accordion sections happen to be expanded on screen (the print
+// CSS force-expands everything).
+function printAll() {
+  clearPrintMarks();
+  window.print();
+}
+
+// Prints just one specific code, wherever it is.
+function printOneCode(key) {
+  clearPrintMarks();
   const card = document.querySelector(`.qr-print-card[data-key="${key}"]`);
   if (!card) return;
   card.classList.add("qr-print-only");
   const cleanup = () => {
-    card.classList.remove("qr-print-only");
+    clearPrintMarks();
     window.removeEventListener("afterprint", cleanup);
   };
   window.addEventListener("afterprint", cleanup);
   window.print();
 }
 
-// Lists every item's QR code, with a Print button, plus a generator at
-// the top for creating a one-off QR code from any text or URL (not
-// tied to a catalog item). All codes are branded with a "CEPC-Lubbock"
-// header and rendered in the brand blue. Cards are spaced apart with a
-// dashed cut-line so they're easy to scan without interference and
-// easy to trim apart if printed on sticker paper.
-//
-// Items with "perUnitQr" checked in Admin get one distinct code per
-// physical unit (e.g. Pole #1 of 31, Pole #2 of 31, ...) instead of a
-// single shared code — useful for equipment where each individual
-// piece needs to be scanned and checked in on its own. Since that can
-// mean a lot of codes, an "All Items" / per-item tab list lets you
-// jump straight to just the codes for one item at a time, and each
-// card has its own "Print This Code" button for printing just one.
+// Prints every code belonging to one item, even if that item's
+// section is currently collapsed.
+function printItemGroup(itemId) {
+  clearPrintMarks();
+  const group = document.querySelector(`.accordion-item[data-item-id="${itemId}"]`);
+  if (!group) return;
+  group.classList.add("qr-print-only-group");
+  const cleanup = () => {
+    clearPrintMarks();
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  window.print();
+}
+
+// Each item is a collapsible section (collapsed by default) so
+// browsing doesn't mean scrolling through every code for every item
+// at once. Items with "perUnitQr" checked in Admin get one distinct
+// code per physical unit (e.g. Pole #1 of 31); everything else gets a
+// single shared code.
 export function QrCodesPage({ items }) {
   const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
-  const [selectedItemId, setSelectedItemId] = useState(null); // null = All Items
+  const [openItems, setOpenItems] = useState({});
 
-  const expanded = useMemo(() => {
-    return sorted.flatMap((item) => {
-      if (item.perUnitQr) {
-        const total = Math.max(Number(item.total) || 0, 1);
-        return Array.from({ length: total }, (_, i) => ({
-          key: `${item.id}-${i + 1}`,
-          itemId: item.id,
-          payload: JSON.stringify({ name: item.name, unit: i + 1 }),
-          label: `${item.name} #${i + 1} of ${total}`,
-        }));
-      }
-      return [
-        {
-          key: item.id,
-          itemId: item.id,
-          payload: JSON.stringify({ name: item.name }),
-          label: item.name,
-        },
-      ];
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items]);
-
-  const selectedItem = sorted.find((i) => i.id === selectedItemId) || null;
-  const visibleEntries = selectedItemId ? expanded.filter((e) => e.itemId === selectedItemId) : expanded;
+  function toggleItem(id) {
+    setOpenItems((o) => ({ ...o, [id]: !o[id] }));
+  }
 
   const [customText, setCustomText] = useState("");
   const [customLabel, setCustomLabel] = useState("");
@@ -87,7 +79,7 @@ export function QrCodesPage({ items }) {
   }
 
   return (
-    <div>
+    <div className="qr-page-root">
       <div style={S.card}>
         <h2 style={S.cardTitle}>Custom QR Code Generator</h2>
         <p style={S.tinyMuted}>
@@ -125,14 +117,9 @@ export function QrCodesPage({ items }) {
               <div style={qrLabelStyle}>{generated.label}</div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button
-                style={S.addItemBtn}
-                onClick={() => {
-                  clearPrintOnly();
-                  window.print();
-                }}
-              >
-                Print This Code              </button>
+              <button style={S.addItemBtn} onClick={() => printOneCode("generated")}>
+                Print This Code
+              </button>
               <button style={S.secondaryBtn} onClick={handleClearGenerated}>
                 Clear
               </button>
@@ -141,36 +128,10 @@ export function QrCodesPage({ items }) {
         )}
       </div>
 
-      {sorted.length > 0 && (
-        <div style={S.catTabs}>
-          <button
-            style={{ ...S.catTab, ...(selectedItemId === null ? S.catTabActive : {}) }}
-            onClick={() => setSelectedItemId(null)}
-          >
-            All Items
-          </button>
-          {sorted.map((item) => (
-            <button
-              key={item.id}
-              style={{ ...S.catTab, ...(selectedItemId === item.id ? S.catTabActive : {}) }}
-              onClick={() => setSelectedItemId(item.id)}
-            >
-              {item.name}
-            </button>
-          ))}
-        </div>
-      )}
-
       <div style={S.adminBar}>
-        <h2 style={S.cardTitle}>{selectedItem ? `${selectedItem.name} QR Codes` : "Printable QR Codes"}</h2>
-        <button
-          style={S.addItemBtn}
-          onClick={() => {
-            clearPrintOnly();
-            window.print();
-          }}
-        >
-          {selectedItem ? "Print This Item's Codes" : "Print All QR Codes"}
+        <h2 style={S.cardTitle}>Printable QR Codes</h2>
+        <button style={S.addItemBtn} onClick={printAll}>
+          Print All QR Codes
         </button>
       </div>
 
@@ -179,49 +140,102 @@ export function QrCodesPage({ items }) {
           <p style={S.tinyMuted}>No items in the catalog yet.</p>
         </div>
       ) : (
-        <div className="qr-print-grid" style={qrGridStyle}>
-          {visibleEntries.map((entry) => (
-            <div key={entry.key} className="qr-print-card" data-key={entry.key} style={qrCardStyle}>
-              <div style={brandHeaderStyle}>CEPC-Lubbock</div>
-              <QRBox payload={entry.payload} color={BRAND_BLUE} />
-              <div style={qrLabelStyle}>{entry.label}</div>
-              <button className="no-print" style={printOneBtnStyle} onClick={() => handlePrintOne(entry.key)}>
-                Print This Code
-              </button>
-            </div>
-          ))}
+        <div style={S.card}>
+          {sorted.map((item) => {
+            const total = Math.max(Number(item.total) || 0, 1);            const codes = item.perUnitQr
+              ? Array.from({ length: total }, (_, i) => ({
+                  key: `${item.id}-${i + 1}`,
+                  payload: JSON.stringify({ name: item.name, unit: i + 1 }),
+                  label: `${item.name} #${i + 1} of ${total}`,
+                }))
+              : [{ key: item.id, payload: JSON.stringify({ name: item.name }), label: item.name }];
+            const isOpen = Boolean(openItems[item.id]);
+
+            return (
+              <div key={item.id} className="accordion-item" data-item-id={item.id} style={accordionItemStyle}>
+                <div style={accordionHeaderStyle} onClick={() => toggleItem(item.id)}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: "#1a1a2e" }}>{item.name}</div>
+                    <div style={S.tinyMuted}>{codes.length === 1 ? "1 code" : `${codes.length} codes`}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <button
+                      className="no-print"
+                      style={printGroupBtnStyle}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        printItemGroup(item.id);
+                      }}
+                    >
+                      Print All
+                    </button>
+                    <span style={{ color: "#bbb", fontSize: 18 }}>{isOpen ? "⌄" : "›"}</span>
+                  </div>
+                </div>
+                <div className="accordion-body" style={{ display: isOpen ? "block" : "none", paddingBottom: 14 }}>
+                  <div className="qr-print-grid" style={qrGridStyle}>
+                    {codes.map((entry) => (
+                      <div key={entry.key} className="qr-print-card" data-key={entry.key} style={qrCardStyle}>
+                        <div style={brandHeaderStyle}>CEPC-Lubbock</div>
+                        <QRBox payload={entry.payload} color={BRAND_BLUE} />
+                        <div style={qrLabelStyle}>{entry.label}</div>
+                        <button className="no-print" style={printOneBtnStyle} onClick={() => printOneCode(entry.key)}>
+                          Print This Code
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
       <style>{`
         @media print {
           body * { visibility: hidden; }
-          .qr-print-grid, .qr-print-grid *, .qr-print-card, .qr-print-card * { visibility: visible; }
-          .qr-print-grid {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-          .qr-print-card {
-            page-break-inside: avoid;
-            box-shadow: none !important;
-          }
-          .qr-print-grid:has(.qr-print-card.qr-print-only) .qr-print-card:not(.qr-print-only) {
+          .qr-page-root, .qr-page-root * { visibility: visible; }
+          .qr-page-root { position: absolute; left: 0; top: 0; width: 100%; }
+          .accordion-body { display: block !important; }
+          .qr-print-card { page-break-inside: avoid; box-shadow: none !important; }
+          .no-print { display: none !important; }
+          .qr-page-root:has(.qr-print-card.qr-print-only) .qr-print-card:not(.qr-print-only) {
             display: none;
           }
-          .no-print { display: none !important; }
+          .qr-page-root:has(.accordion-item.qr-print-only-group) .accordion-item:not(.qr-print-only-group) {
+            display: none;
+          }
         }
       `}</style>
     </div>
   );
 }
 
+const accordionItemStyle = { borderBottom: "1px solid #eee" };
+const accordionHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "12px 4px",
+  cursor: "pointer",
+};
+const printGroupBtnStyle = {
+  background: "#eef0f5",
+  color: NAVY,
+  border: "none",
+  borderRadius: 6,
+  padding: "5px 10px",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
 const qrGridStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
   gap: 32,
-  marginTop: 14,
+  marginTop: 10,
 };
 
 const qrCardStyle = {

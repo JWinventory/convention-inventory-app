@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { QRBox } from "./QRBox";
+import { Icon } from "./Icon";
 import { S, NAVY } from "../styles";
 
 // Change this one value if you get the exact official jw.org blue hex —
@@ -57,6 +58,9 @@ function printItemGroup(itemId) {
 export function QrCodesPage({ items }) {
   const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
   const [openItems, setOpenItems] = useState({});
+  const [search, setSearch] = useState("");
+
+  const filtered = sorted.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()));
 
   function toggleItem(id) {
     setOpenItems((o) => ({ ...o, [id]: !o[id] }));
@@ -135,14 +139,32 @@ export function QrCodesPage({ items }) {
         </button>
       </div>
 
+      {sorted.length > 0 && (
+        <div style={S.toolbar}>
+          <div style={S.searchWrap}>
+            <Icon.search />
+            <input
+              style={S.searchInput}
+              placeholder="Search items…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}            />
+          </div>
+        </div>
+      )}
+
       {sorted.length === 0 ? (
         <div style={S.card}>
           <p style={S.tinyMuted}>No items in the catalog yet.</p>
         </div>
+      ) : filtered.length === 0 ? (
+        <div style={S.card}>
+          <p style={S.tinyMuted}>No items match "{search}".</p>
+        </div>
       ) : (
         <div style={S.card}>
-          {sorted.map((item) => {
-            const total = Math.max(Number(item.total) || 0, 1);            const codes = item.perUnitQr
+          {filtered.map((item) => {
+            const total = Math.max(Number(item.total) || 0, 1);
+            const codes = item.perUnitQr
               ? Array.from({ length: total }, (_, i) => ({
                   key: `${item.id}-${i + 1}`,
                   payload: JSON.stringify({ name: item.name, unit: i + 1 }),

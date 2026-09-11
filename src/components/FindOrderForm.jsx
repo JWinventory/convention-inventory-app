@@ -19,7 +19,7 @@ export function FindOrderForm({ onFind }) {
     return (
       <div style={{ textAlign: "center", margin: "4px 0 16px" }}>
         <button style={S.editBtn} onClick={() => setOpen(true)}>
-          Already submitted a request on another device?
+          Already submitted an order?
         </button>
       </div>
     );

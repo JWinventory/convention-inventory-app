@@ -73,6 +73,13 @@ export const S = {
   itemName: { fontSize: 12.5, fontWeight: 700, color: "#1a1a2e", lineHeight: 1.25, minHeight: 30 },
   itemNote: { fontSize: 10, color: "#999", marginTop: 2, lineHeight: 1.3 },
 
+  availableRow: { textAlign: "center", margin: "8px 0 6px" },
+  availableCount: { fontSize: 20, fontWeight: 800, color: "#1a1a2e" },
+  availableLabel: { fontSize: 11, color: "#888", fontWeight: 600 },
+
+  qtyRow: { display: "flex", gap: 6, alignItems: "stretch" },
+  qtySelect: { width: 54, fontSize: 13, fontWeight: 700, color: "#1a1a2e", border: "1px solid #d9dce3", borderRadius: 7, background: "#fff", textAlign: "center" },
+
   countRow: { display: "flex", justifyContent: "space-between", margin: "8px 0", gap: 4 },
   countBox: { flex: 1, textAlign: "center", background: "#f7f8fa", borderRadius: 6, padding: "4px 0" },
   countVal: { fontSize: 13, fontWeight: 800, color: "#555" },

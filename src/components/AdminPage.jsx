@@ -8,7 +8,7 @@ import { fileToCompressedDataUrl, getItemImages } from "../imageUtils";
 
 const EVENT_OPTIONS = ["Circuit Assembly", "Regional Convention", "Memorial"];
 
-const BLANK_FORM = { name: "", category: "", total: "1", note: "", images: [], events: [] };
+const BLANK_FORM = { name: "", category: "", total: "1", note: "", images: [], events: [], perUnitQr: false };
 
 export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty, syncStatus }) {
   const [search, setSearch] = useState("");
@@ -44,6 +44,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
       note: item.note || "",
       images: getItemImages(item),
       events: Array.isArray(item.events) ? item.events : [],
+      perUnitQr: Boolean(item.perUnitQr),
     });
     setEditing(item);
   }
@@ -87,6 +88,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
         note: form.note.trim(),
         images: form.images,
         events: form.events,
+        perUnitQr: form.perUnitQr,
       };
       if (editing === "new") {
         await addItem(payload);
@@ -180,6 +182,15 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
           <label style={S.fieldLabel}>
             Total Quantity
             <input style={S.fieldInput} type="number" min="0" value={form.total} onChange={(e) => setForm((f) => ({ ...f, total: e.target.value }))} />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#1a1a2e", marginBottom: 14 }}>
+            <input
+              type="checkbox"
+              checked={form.perUnitQr}
+              onChange={(e) => setForm((f) => ({ ...f, perUnitQr: e.target.checked }))}
+            />
+            Print a separate QR code for each unit (e.g. Pole #1, #2… — for items where each physical
+            piece needs its own code)
           </label>
           <label style={S.fieldLabel}>
             Note (optional)

@@ -25,7 +25,7 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   const lineItemsRef = useRef(lineItems);
   const itemsRef = useRef(items);
   const onResolveActionRef = useRef(onResolveAction);
-  const lastScanRef = useRef({ name: null, at: 0 });
+  const lastScanRef = useRef({ code: null, at: 0 });
   const scannerInstanceRef = useRef(null);
 
   useEffect(() => {
@@ -63,9 +63,10 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   }
 
   async function handleDecoded(decodedText) {
+    const trimmed = decodedText.trim();
     let payload;
     try {
-      payload = JSON.parse(decodedText.trim());
+      payload = JSON.parse(trimmed);
     } catch (e) {
       showFlash("That QR code isn't recognized.", "error");
       return;
@@ -73,10 +74,14 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
 
     const name = payload.name;
     const now = Date.now();
-    if (lastScanRef.current.name === name && now - lastScanRef.current.at < 2500) {
-      return; // debounce repeat reads of the same code while it's still in frame
+    // Debounce by the exact code (not just the item name) — items with a
+    // separate QR code per unit share the same name, so keying on the
+    // full code lets distinct physical units be scanned back-to-back
+    // without one blocking the next.
+    if (lastScanRef.current.code === trimmed && now - lastScanRef.current.at < 2500) {
+      return; // debounce repeat reads of the same physical code while it's still in frame
     }
-    lastScanRef.current = { name, at: now };
+    lastScanRef.current = { code: trimmed, at: now };
 
     const li = lineItemsRef.current.find((l) => l.name === name);
     if (!li) {

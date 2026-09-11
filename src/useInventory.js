@@ -136,9 +136,7 @@ export function useInventory() {
     }
   }, []);
 
-  // note is optional — set when an item is checked in manually because
-  // its QR code was missing or damaged, so there's a record of why.
-  const applyCheckChange = useCallback(async (id, delta, who, note) => {
+  const applyCheckChange = useCallback(async (id, delta, who) => {
     setSyncStatus("yellow");
     try {
       const ref = doc(db, ITEMS_COL, id);
@@ -153,7 +151,6 @@ export function useInventory() {
         action: delta > 0 ? "Checked OUT" : "Checked IN",
         qty: Math.abs(delta),
         at: new Date().toLocaleString(),
-        ...(note ? { note } : {}),
       };
       const nextLog = [entry, ...(data.log || [])].slice(0, 25);
       await updateDoc(ref, { out: nextOut, log: nextLog });
@@ -163,40 +160,37 @@ export function useInventory() {
     }
   }, []);
 
-  // Creates the order and returns its new id, so the requester's own
-  // browser can track "this is my order" through the fulfillment/
-  // check-in phases. Starts life with status "submitted".
+  // Zeroes out every item's checked-out count, making everything show
+  // as fully available again. Used after an order is submitted, so the
+  // catalog is reset and ready for the next event.
+  const resetAllAvailable = useCallback(async () => {
+    setSyncStatus("yellow");
+    try {
+      const snap = await getDocs(collection(db, ITEMS_COL));
+      await Promise.all(
+        snap.docs.map((d) => updateDoc(doc(db, ITEMS_COL, d.id), { out: 0, log: [] }))
+      );
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
+    }
+  }, []);
+
   const addOrder = useCallback(async (order) => {
     setSyncStatus("yellow");
     try {
-      const ref = await addDoc(collection(db, ORDERS_COL), {
+      await addDoc(collection(db, ORDERS_COL), {
         requesterName: order.requester.name || "",
         requesterPhone: order.requester.phone || "",
         requesterEmail: order.requesterEmail || "",
-        eventType: order.requester.eventType || "",
         eventDate: order.requester.eventDate || "",
         pickupDate: order.requester.pickupDate || "",
         returnDate: order.requester.returnDate || "",
         items: order.items, // [{ name, qty }]
         notes: order.notes || "",
-        status: "submitted", // submitted -> fulfilled (then "completed" is derived once items are checked back in)
         createdAtMs: Date.now(),
         createdAtLabel: new Date().toLocaleString(),
       });
-      setSyncStatus("green");
-      return ref.id;
-    } catch (e) {
-      setSyncStatus("red");
-      return null;
-    }
-  }, []);
-
-  // Flips an order's status (e.g. "submitted" -> "fulfilled" when
-  // staff have gathered the items and are ready to notify the requester).
-  const updateOrderStatus = useCallback(async (orderId, status) => {
-    setSyncStatus("yellow");
-    try {
-      await updateDoc(doc(db, ORDERS_COL, orderId), { status });
       setSyncStatus("green");
     } catch (e) {
       setSyncStatus("red");
@@ -225,8 +219,8 @@ export function useInventory() {
     updateItem,
     deleteItem,
     applyCheckChange,
+    resetAllAvailable,
     addOrder,
-    updateOrderStatus,
     saveNotes,
   };
 }

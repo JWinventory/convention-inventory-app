@@ -110,7 +110,8 @@ function OrderCard({ order, onMarkReady }) {
       </div>
 
       <div style={S.tinyMuted}>
-        Event {order.eventDate || "—"} · Pickup {order.pickupDate || "—"} · Return {order.returnDate || "—"}
+        {order.eventType || "—"} · Event {order.eventDate || "—"} · Pickup {order.pickupDate || "—"} · Return{" "}
+        {order.returnDate || "—"}
       </div>
 
       <div style={{ ...S.summaryListWrap, marginTop: 10 }}>

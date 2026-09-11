@@ -2,13 +2,17 @@ import React from "react";
 import { S } from "../styles";
 import { Icon } from "./Icon";
 
+const EVENT_OPTIONS = ["Circuit Assembly", "Regional Convention", "Memorial"];
+
 export function RequesterForm({ requester, setRequester, locked, onSave, onEdit }) {
   function update(field, val) {
     setRequester((r) => ({ ...r, [field]: val }));
   }
+
   const complete =
     requester.name.trim() &&
     requester.phone.trim() &&
+    requester.eventType &&
     requester.eventDate &&
     requester.pickupDate &&
     requester.returnDate;
@@ -26,6 +30,13 @@ export function RequesterForm({ requester, setRequester, locked, onSave, onEdit 
       <div style={S.formGrid}>
         <Field label="Requester Name" value={requester.name} locked={locked} onChange={(v) => update("name", v)} placeholder="Full name" />
         <Field label="Cell Phone Number" value={requester.phone} locked={locked} onChange={(v) => update("phone", v)} placeholder="(555) 555-5555" />
+        <SelectField
+          label="Event"
+          value={requester.eventType}
+          locked={locked}
+          onChange={(v) => update("eventType", v)}
+          options={EVENT_OPTIONS}
+        />
         <Field label="Event Date" value={requester.eventDate} locked={locked} onChange={(v) => update("eventDate", v)} type="date" />
         <Field label="Desired Pick Up Date" value={requester.pickupDate} locked={locked} onChange={(v) => update("pickupDate", v)} type="date" />
         <Field label="Return Date" value={requester.returnDate} locked={locked} onChange={(v) => update("returnDate", v)} type="date" />
@@ -51,6 +62,27 @@ function Field({ label, value, onChange, locked, type = "text", placeholder }) {
         disabled={locked}
         onChange={(e) => onChange(e.target.value)}
       />
+    </label>
+  );
+}
+
+function SelectField({ label, value, onChange, locked, options }) {
+  return (
+    <label style={S.fieldLabel}>
+      {label}
+      <select
+        style={{ ...S.fieldInput, ...(locked ? S.fieldInputLocked : {}) }}
+        value={value}
+        disabled={locked}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">Select event…</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }

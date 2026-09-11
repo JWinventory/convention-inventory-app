@@ -4,7 +4,6 @@ import { Icon } from "./components/Icon";
 import { RequesterForm } from "./components/RequesterForm";
 import { ItemCard } from "./components/ItemCard";
 import { NotesSection } from "./components/NotesSection";
-import { ScanModal } from "./components/ScanModal";
 import { CheckInScanModal } from "./components/CheckInScanModal";
 import { QrModal } from "./components/QrModal";
 import { SubmitModal } from "./components/SubmitModal";
@@ -24,7 +23,7 @@ function loadRequester() {
   } catch (e) {
     /* ignore */
   }
-  return { name: "", phone: "", eventDate: "", pickupDate: "", returnDate: "" };
+  return { name: "", phone: "", eventType: "", eventDate: "", pickupDate: "", returnDate: "" };
 }
 
 // Matches each order line item up against the live catalog to see how
@@ -82,7 +81,6 @@ export default function App() {
   });
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
-  const [scanOpen, setScanOpen] = useState(false);
   const [checkInScanOpen, setCheckInScanOpen] = useState(false);
   const [qrItem, setQrItem] = useState(null);
   const [submitOpen, setSubmitOpen] = useState(false);
@@ -128,8 +126,6 @@ export default function App() {
     () => items.filter((it) => (it.out || 0) > 0),
     [items]
   );
-
-  const canScan = requesterLocked && requester.name.trim() !== "" && requester.phone.trim() !== "";
 
   function saveNote() {
     saveNotes(noteDraft);
@@ -183,6 +179,7 @@ export default function App() {
     const foundRequester = {
       name: found.requesterName || "",
       phone: found.requesterPhone || "",
+      eventType: found.eventType || "",
       eventDate: found.eventDate || "",
       pickupDate: found.pickupDate || "",
       returnDate: found.returnDate || "",
@@ -219,7 +216,7 @@ export default function App() {
         <header style={S.header}>
           <div style={S.headerTop}>
             <div style={S.headerTitleRow}>
-              <h1 style={S.h1}>Convention Inventory</h1>
+              <h1 style={S.h1}>Circuit / Convention Inventory</h1>
             </div>
           </div>
         </header>
@@ -239,7 +236,7 @@ export default function App() {
       <header style={S.header}>
         <div style={S.headerTop}>
           <div style={S.headerTitleRow}>
-            <h1 style={S.h1}>Convention Inventory</h1>
+            <h1 style={S.h1}>Circuit / Convention Inventory</h1>
             <SyncDot status={syncStatus} />
           </div>
           <div style={S.h2}>Equipment check-in / check-out tracker</div>
@@ -282,18 +279,6 @@ export default function App() {
               onSave={saveRequester}
               onEdit={editRequester}
             />
-            <div style={S.scanRow}>
-              <button
-                style={{ ...S.scanBtn, ...(canScan ? {} : S.scanBtnDisabled) }}
-                disabled={!canScan}
-                onClick={() => setScanOpen(true)}
-              >
-                <Icon.camera />&nbsp;Scan QR
-              </button>
-              <div style={S.scanHint}>
-                {canScan ? "Tap to check items in or out" : "Save your request details above to enable scanning"}
-              </div>
-            </div>
             <div style={S.toolbar}>
               <div style={S.searchWrap}>
                 <Icon.search />
@@ -321,7 +306,6 @@ export default function App() {
                   key={item.id}
                   item={item}
                   onCheckOut={(qty) => applyCheckChange(item.id, qty, requester.name)}
-                  onCheckIn={(qty) => applyCheckChange(item.id, -qty, requester.name)}
                   onShowQr={() => setQrItem(item)}
                 />
               ))}
@@ -340,14 +324,6 @@ export default function App() {
         </button>
       )}
 
-      {scanOpen && (
-        <ScanModal
-          items={items}
-          itemState={Object.fromEntries(items.map((i) => [i.id, { out: i.out || 0 }]))}
-          onResolveAction={(id, delta) => applyCheckChange(id, delta, requester.name)}
-          onClose={() => setScanOpen(false)}
-        />
-      )}
       {checkInScanOpen && myOrder && (
         <CheckInScanModal
           lineItems={myLineItems}

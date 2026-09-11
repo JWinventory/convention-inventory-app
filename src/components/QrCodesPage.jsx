@@ -1,10 +1,30 @@
 import React, { useMemo, useState } from "react";
 import { QRBox } from "./QRBox";
-import { S } from "../styles";
+import { S, NAVY } from "../styles";
 
 // Change this one value if you get the exact official jw.org blue hex —
 // it controls the color of every QR code on this page.
 const BRAND_BLUE = "#0072CE";
+
+function clearPrintOnly() {
+  document.querySelectorAll(".qr-print-card.qr-print-only").forEach((el) => el.classList.remove("qr-print-only"));
+}
+
+// Marks just one card for printing (via a temporary class + CSS :has()
+// rule) so a single QR code can be printed on its own, without pulling
+// in every other card on the page.
+function handlePrintOne(key) {
+  clearPrintOnly();
+  const card = document.querySelector(`.qr-print-card[data-key="${key}"]`);
+  if (!card) return;
+  card.classList.add("qr-print-only");
+  const cleanup = () => {
+    card.classList.remove("qr-print-only");
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  window.print();
+}
 
 // Lists every item's QR code, with a Print button, plus a generator at
 // the top for creating a one-off QR code from any text or URL (not
@@ -18,7 +38,8 @@ const BRAND_BLUE = "#0072CE";
 // single shared code — useful for equipment where each individual
 // piece needs to be scanned and checked in on its own. Since that can
 // mean a lot of codes, an "All Items" / per-item tab list lets you
-// jump straight to just the codes for one item at a time.
+// jump straight to just the codes for one item at a time, and each
+// card has its own "Print This Code" button for printing just one.
 export function QrCodesPage({ items }) {
   const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
   const [selectedItemId, setSelectedItemId] = useState(null); // null = All Items
@@ -98,14 +119,20 @@ export function QrCodesPage({ items }) {
 
         {generated && (
           <div style={{ marginTop: 16 }}>
-            <div className="qr-print-card" style={qrCardStyle}>
+            <div className="qr-print-card" data-key="generated" style={qrCardStyle}>
               <div style={brandHeaderStyle}>CEPC-Lubbock</div>
               <QRBox payload={generated.text} color={BRAND_BLUE} />
               <div style={qrLabelStyle}>{generated.label}</div>
-            </div>            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button style={S.addItemBtn} onClick={() => window.print()}>
-                Print This Code
-              </button>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button
+                style={S.addItemBtn}
+                onClick={() => {
+                  clearPrintOnly();
+                  window.print();
+                }}
+              >
+                Print This Code              </button>
               <button style={S.secondaryBtn} onClick={handleClearGenerated}>
                 Clear
               </button>
@@ -136,7 +163,13 @@ export function QrCodesPage({ items }) {
 
       <div style={S.adminBar}>
         <h2 style={S.cardTitle}>{selectedItem ? `${selectedItem.name} QR Codes` : "Printable QR Codes"}</h2>
-        <button style={S.addItemBtn} onClick={() => window.print()}>
+        <button
+          style={S.addItemBtn}
+          onClick={() => {
+            clearPrintOnly();
+            window.print();
+          }}
+        >
           {selectedItem ? "Print This Item's Codes" : "Print All QR Codes"}
         </button>
       </div>
@@ -148,10 +181,13 @@ export function QrCodesPage({ items }) {
       ) : (
         <div className="qr-print-grid" style={qrGridStyle}>
           {visibleEntries.map((entry) => (
-            <div key={entry.key} className="qr-print-card" style={qrCardStyle}>
+            <div key={entry.key} className="qr-print-card" data-key={entry.key} style={qrCardStyle}>
               <div style={brandHeaderStyle}>CEPC-Lubbock</div>
               <QRBox payload={entry.payload} color={BRAND_BLUE} />
               <div style={qrLabelStyle}>{entry.label}</div>
+              <button className="no-print" style={printOneBtnStyle} onClick={() => handlePrintOne(entry.key)}>
+                Print This Code
+              </button>
             </div>
           ))}
         </div>
@@ -171,6 +207,10 @@ export function QrCodesPage({ items }) {
             page-break-inside: avoid;
             box-shadow: none !important;
           }
+          .qr-print-grid:has(.qr-print-card.qr-print-only) .qr-print-card:not(.qr-print-only) {
+            display: none;
+          }
+          .no-print { display: none !important; }
         }
       `}</style>
     </div>
@@ -207,4 +247,17 @@ const qrLabelStyle = {
   fontWeight: 700,
   marginTop: 6,
   color: "#1a1a2e",
+};
+
+const printOneBtnStyle = {
+  marginTop: 8,
+  width: "100%",
+  background: "#eef0f5",
+  color: NAVY,
+  border: "none",
+  borderRadius: 6,
+  padding: "6px 0",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
 };

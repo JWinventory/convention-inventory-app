@@ -6,7 +6,9 @@ import { Lightbox } from "./Lightbox";
 import { ImageCarousel } from "./ImageCarousel";
 import { fileToCompressedDataUrl, getItemImages } from "../imageUtils";
 
-const BLANK_FORM = { name: "", category: "", total: "1", note: "", images: [] };
+const EVENT_OPTIONS = ["Circuit Assembly", "Regional Convention", "Memorial"];
+
+const BLANK_FORM = { name: "", category: "", total: "1", note: "", images: [], events: [] };
 
 export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty, syncStatus }) {
   const [search, setSearch] = useState("");
@@ -41,6 +43,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
       total: String(item.total),
       note: item.note || "",
       images: getItemImages(item),
+      events: Array.isArray(item.events) ? item.events : [],
     });
     setEditing(item);
   }
@@ -66,6 +69,13 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
     setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
   }
 
+  function toggleEvent(ev) {
+    setForm((f) => ({
+      ...f,
+      events: f.events.includes(ev) ? f.events.filter((x) => x !== ev) : [...f.events, ev],
+    }));
+  }
+
   async function handleSave() {
     if (!form.name.trim() || !form.category.trim()) return;
     setSaving(true);
@@ -76,6 +86,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
         total: Number(form.total) || 0,
         note: form.note.trim(),
         images: form.images,
+        events: form.events,
       };
       if (editing === "new") {
         await addItem(payload);
@@ -175,6 +186,16 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
             <textarea style={S.textarea} rows={2} value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
           </label>
 
+          <label style={S.fieldLabel}>Visible For (leave all unchecked to show for every event)</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
+            {EVENT_OPTIONS.map((ev) => (
+              <label key={ev} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#1a1a2e" }}>
+                <input type="checkbox" checked={form.events.includes(ev)} onChange={() => toggleEvent(ev)} />
+                {ev}
+              </label>
+            ))}
+          </div>
+
           <label style={S.fieldLabel}>Photos (optional)</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
             {form.images.map((src, i) => (
@@ -229,6 +250,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
 function AdminItemCard({ item, onEdit, onDelete, onEnlarge }) {
   const color = colorFor(item.category);
   const images = getItemImages(item);
+  const events = Array.isArray(item.events) ? item.events : [];
   return (
     <div style={S.itemCard}>
       <div style={{ ...S.catStripe, background: color }} />
@@ -238,6 +260,7 @@ function AdminItemCard({ item, onEdit, onDelete, onEnlarge }) {
       <div style={{ ...S.itemCat, color }}>{item.category}</div>
       <div style={S.itemName}>{item.name}</div>
       <div style={S.tinyMuted}>Total: {item.total} · Out: {item.out || 0}</div>
+      <div style={S.tinyMuted}>{events.length > 0 ? events.join(", ") : "All events"}</div>
       <div style={S.adminBtnRow}>
         <button style={S.adminEditBtn} onClick={onEdit}>
           <Icon.edit /> Edit

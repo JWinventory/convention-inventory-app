@@ -109,6 +109,10 @@ export default function App() {
     return items
       .filter((it) => {
         if (activeCat !== "All" && it.category !== activeCat) return false;
+        if (requester.eventType) {
+          const evs = Array.isArray(it.events) ? it.events : [];
+          if (evs.length > 0 && !evs.includes(requester.eventType)) return false;
+        }
         if (search.trim()) {
           const q = search.trim().toLowerCase();
           if (!it.name.toLowerCase().includes(q) && !it.category.toLowerCase().includes(q)) return false;
@@ -116,7 +120,7 @@ export default function App() {
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, activeCat, search]);
+  }, [items, activeCat, search, requester.eventType]);
 
   const checkedOutItems = useMemo(
     () => items.filter((it) => (it.out || 0) > 0),

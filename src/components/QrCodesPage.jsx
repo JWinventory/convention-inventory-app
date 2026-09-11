@@ -12,8 +12,31 @@ const BRAND_BLUE = "#0072CE";
 // "CEPC-Lubbock" header and rendered in the brand blue. Cards are
 // spaced apart with a dashed cut-line so they're easy to scan without
 // interference and easy to trim apart if printed on sticker paper.
+//
+// Items with "perUnitQr" checked in Admin get one distinct code per
+// physical unit (e.g. Pole #1 of 31, Pole #2 of 31, ...) instead of a
+// single shared code — useful for equipment where each individual
+// piece needs to be scanned and checked in on its own.
 export function QrCodesPage({ items }) {
   const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
+
+  const expanded = sorted.flatMap((item) => {
+    if (item.perUnitQr) {
+      const total = Math.max(Number(item.total) || 0, 1);
+      return Array.from({ length: total }, (_, i) => ({
+        key: `${item.id}-${i + 1}`,
+        payload: JSON.stringify({ name: item.name, unit: i + 1 }),
+        label: `${item.name} #${i + 1} of ${total}`,
+      }));
+    }
+    return [
+      {
+        key: item.id,
+        payload: JSON.stringify({ name: item.name }),
+        label: item.name,
+      },
+    ];
+  });
 
   const [customText, setCustomText] = useState("");
   const [customLabel, setCustomLabel] = useState("");
@@ -94,11 +117,11 @@ export function QrCodesPage({ items }) {
         </div>
       ) : (
         <div className="qr-print-grid" style={qrGridStyle}>
-          {sorted.map((item) => (
-            <div key={item.id} className="qr-print-card" style={qrCardStyle}>
+          {expanded.map((entry) => (
+            <div key={entry.key} className="qr-print-card" style={qrCardStyle}>
               <div style={brandHeaderStyle}>CEPC-Lubbock</div>
-              <QRBox payload={JSON.stringify({ name: item.name })} color={BRAND_BLUE} />
-              <div style={qrLabelStyle}>{item.name}</div>
+              <QRBox payload={entry.payload} color={BRAND_BLUE} />
+              <div style={qrLabelStyle}>{entry.label}</div>
             </div>
           ))}
         </div>

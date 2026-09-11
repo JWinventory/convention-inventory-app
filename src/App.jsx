@@ -9,6 +9,7 @@ import { QrModal } from "./components/QrModal";
 import { SubmitModal } from "./components/SubmitModal";
 import { MyOrderStatus } from "./components/MyOrderStatus";
 import { FindOrderForm } from "./components/FindOrderForm";
+import { SelectedItemsList } from "./components/SelectedItemsList";
 import { AdminHub } from "./components/AdminHub";
 import { useInventory } from "./useInventory";
 import { firebaseConfigured } from "./firebase";
@@ -128,6 +129,12 @@ export default function App() {
     setTimeout(() => setNoteFlash(false), 2000);
   }
 
+  // Fully checks an item back in, taking it off the pending order —
+  // used by the "Remove" button in the Your Order So Far list.
+  function handleRemoveFromOrder(item) {
+    applyCheckChange(item.id, -(item.out || 0), requester.name);
+  }
+
   // --- Phase 1-3 order tracking (this browser's own submitted order) ---
   const myOrder = useMemo(() => orders.find((o) => o.id === myOrderId) || null, [orders, myOrderId]);
   const myLineItems = useMemo(() => (myOrder ? computeLineItems(myOrder, items) : []), [myOrder, items]);
@@ -172,7 +179,8 @@ export default function App() {
     setMyOrderId(found.id);
 
     setRequester({
-      name: found.requesterName || "",      phone: found.requesterPhone || "",
+      name: found.requesterName || "",
+      phone: found.requesterPhone || "",
       eventType: found.eventType || "",
       eventDate: found.eventDate || "",
       pickupDate: found.pickupDate || "",
@@ -264,6 +272,7 @@ export default function App() {
           <>
             <FindOrderForm onFind={handleFindOrder} />
             <RequesterForm requester={requester} setRequester={setRequester} />
+            <SelectedItemsList items={checkedOutItems} onRemove={handleRemoveFromOrder} />
             <div style={S.toolbar}>
               <div style={S.searchWrap}>
                 <Icon.search />

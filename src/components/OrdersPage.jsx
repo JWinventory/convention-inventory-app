@@ -318,7 +318,6 @@ function OrderCard({ order, volunteers, reviewerName, onMarkReady, onUpdateOrder
           )}
         </div>
       )}
-
       {/* Phase 2, step 3: fill + notify */}
       {order.status === "assigned" && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>

@@ -128,7 +128,7 @@ export function AdminHub({
         />
       )}
       {section === "history" && <OrderHistoryPage orders={orders} items={items} />}
-      {section === "qrcodes" && <QrCodesPage items={items} />}
+      {section === "qrcodes" && <QrCodesPage items={items} updateItem={updateItem} />}
       {section === "emergency" && <EmergencyChecklistPage items={items} />}
     </div>
   );

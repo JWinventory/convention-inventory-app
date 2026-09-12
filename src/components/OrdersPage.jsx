@@ -58,10 +58,11 @@ export function OrdersPage({
       />
 
       {needsReviewCount > 0 && (
-        <div style={reviewBannerStyle}>
+        <div style={needsReviewBannerStyle}>
           {needsReviewCount === 1
-            ? "1 order needs review before it can be assigned."
-            : `${needsReviewCount} orders need review before they can be assigned.`}
+            ? "1 request needs review"
+            : `${needsReviewCount} requests need review`}
+          {reviewerName ? ` — ${reviewerName}, take a look below.` : " — set a reviewer above to get notified."}
         </div>
       )}
 
@@ -107,7 +108,7 @@ export function OrdersPage({
 function VolunteerSettings({ volunteers, reviewerName, reviewerEmail, onSaveVolunteers, onSaveReviewerSettings }) {
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
-  const [emailDraft, setEmailDraft] = useState(reviewerEmail || "");
+  const [emailDraft, setEmailDraft] = useState(reviewerEmail);
 
   function addVolunteer() {
     const name = newName.trim();
@@ -123,12 +124,14 @@ function VolunteerSettings({ volunteers, reviewerName, reviewerEmail, onSaveVolu
     }
   }
 
-  function setReviewer(name) {
+  function handleReviewerChange(name) {
     onSaveReviewerSettings(name, emailDraft);
   }
 
-  function saveEmail() {
-    onSaveReviewerSettings(reviewerName, emailDraft.trim());
+  function handleEmailBlur() {
+    if (emailDraft !== reviewerEmail) {
+      onSaveReviewerSettings(reviewerName, emailDraft);
+    }
   }
 
   if (!open) {
@@ -181,7 +184,7 @@ function VolunteerSettings({ volunteers, reviewerName, reviewerEmail, onSaveVolu
 
       <label style={S.fieldLabel}>
         Reviewer
-        <select style={S.fieldInput} value={reviewerName || ""} onChange={(e) => setReviewer(e.target.value)}>
+        <select style={S.fieldInput} value={reviewerName || ""} onChange={(e) => handleReviewerChange(e.target.value)}>
           <option value="">Select…</option>
           {volunteers.map((v) => (
             <option key={v} value={v}>
@@ -191,17 +194,17 @@ function VolunteerSettings({ volunteers, reviewerName, reviewerEmail, onSaveVolu
         </select>
       </label>
       <label style={S.fieldLabel}>
-        Reviewer Email (for the "needs review" notification)
+        Reviewer Email(s) — separate multiple with commas
         <input
           style={S.fieldInput}
-          type="email"
+          type="text"
           value={emailDraft}
           onChange={(e) => setEmailDraft(e.target.value)}
-          onBlur={saveEmail}
-          placeholder="reviewer@example.com"
+          onBlur={handleEmailBlur}
+          placeholder="reviewer@example.com, another@example.com"
         />
       </label>
-      <p style={S.tinyMuted}>This person must confirm a request before it can be assigned to be filled.</p>
+      <p style={S.tinyMuted}>This person must mark a request as reviewed before it can be assigned.</p>
     </div>
   );
 }
@@ -211,9 +214,8 @@ function OrderCard({ order, volunteers, reviewerName, onMarkReady, onUpdateOrder
   const [pickedFillers, setPickedFillers] = useState(order.assignedFillers || []);
 
   const reviewerConfigured = Boolean(reviewerName);
-  const alreadyReviewed = order.reviewedBy.includes(reviewerName);
 
-  function markReviewed() {
+  function handleMarkReviewed() {
     onUpdateOrder(order.id, { reviewedBy: [reviewerName], status: "reviewed" });
   }
 
@@ -257,6 +259,7 @@ function OrderCard({ order, volunteers, reviewerName, onMarkReady, onUpdateOrder
         {order.eventType || "—"} · Event {order.eventDate || "—"} · Pickup {order.pickupDate || "—"} · Return{" "}
         {order.returnDate || "—"}
       </div>
+
       <div style={{ ...S.summaryListWrap, marginTop: 10 }}>
         {order.lineItems.map((li, idx) => (
           <div key={idx} style={S.summaryRow}>
@@ -283,7 +286,7 @@ function OrderCard({ order, volunteers, reviewerName, onMarkReady, onUpdateOrder
           {!reviewerConfigured ? (
             <p style={S.tinyMuted}>Set a reviewer above under "Manage Volunteers & Reviewer" to continue.</p>
           ) : (
-            <button style={S.primaryBtn} onClick={markReviewed} disabled={alreadyReviewed}>
+            <button style={S.primaryBtn} onClick={handleMarkReviewed}>
               Mark as Reviewed ({reviewerName})
             </button>
           )}
@@ -294,7 +297,7 @@ function OrderCard({ order, volunteers, reviewerName, onMarkReady, onUpdateOrder
       {order.status === "reviewed" && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#555", marginBottom: 6 }}>
-            Reviewed by {reviewerName} — assign who will fill this order
+            Reviewed by {order.reviewedBy.join(", ")} — assign who will fill this order
           </div>
           {volunteers.length === 0 ? (
             <p style={S.tinyMuted}>Add volunteers above to assign someone.</p>
@@ -366,7 +369,7 @@ function StatusTag({ status }) {
   );
 }
 
-const reviewBannerStyle = {
+const needsReviewBannerStyle = {
   background: "#fdecea",
   border: "1px solid #f5b7b1",
   color: "#c0392b",

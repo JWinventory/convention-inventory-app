@@ -35,13 +35,16 @@ function printOneCode(key) {
   window.print();
 }
 
-// Prints every code belonging to one item, even if that item's
-// section is currently collapsed.
-function printItemGroup(itemId) {
+// Prints every code belonging to one or more items — used for both
+// "Print All" on a single item's header and "Print Selected" across a
+// custom group, since both just mark a set of items to keep visible.
+function printItemGroups(itemIds) {
   clearPrintMarks();
-  const group = document.querySelector(`.accordion-item[data-item-id="${itemId}"]`);
-  if (!group) return;
-  group.classList.add("qr-print-only-group");
+  const found = itemIds
+    .map((id) => document.querySelector(`.accordion-item[data-item-id="${id}"]`))
+    .filter(Boolean);
+  if (found.length === 0) return;
+  found.forEach((el) => el.classList.add("qr-print-only-group"));
   const cleanup = () => {
     clearPrintMarks();
     window.removeEventListener("afterprint", cleanup);
@@ -52,18 +55,44 @@ function printItemGroup(itemId) {
 
 // Each item is a collapsible section (collapsed by default) so
 // browsing doesn't mean scrolling through every code for every item
-// at once. Items with "perUnitQr" checked in Admin get one distinct
-// code per physical unit (e.g. Pole #1 of 31); everything else gets a
-// single shared code.
-export function QrCodesPage({ items }) {
+// at once. Each item also has its own adjustable "how many codes"
+// count — independent of its catalog Total Quantity, so you can print
+// spares, fewer than you have, or however many you actually need —
+// and a checkbox to build a custom group of items to print together.
+export function QrCodesPage({ items, updateItem }) {
   const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
   const [openItems, setOpenItems] = useState({});
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState({}); // { [itemId]: true }
+  const [countDrafts, setCountDrafts] = useState({}); // { [itemId]: "5" } while editing
 
   const filtered = sorted.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()));
+  const selectedIds = Object.keys(selected).filter((id) => selected[id]);
 
   function toggleItem(id) {
     setOpenItems((o) => ({ ...o, [id]: !o[id] }));
+  }
+
+  function toggleSelected(id) {
+    setSelected((s) => ({ ...s, [id]: !s[id] }));
+  }
+
+  function countFor(item) {
+    if (countDrafts[item.id] !== undefined) return countDrafts[item.id];
+    const stored = item.qrCount != null ? item.qrCount : item.perUnitQr ? Math.max(Number(item.total) || 0, 1) : 1;
+    return String(stored);
+  }
+
+  function commitCount(item) {
+    const raw = countDrafts[item.id];
+    if (raw === undefined) return;
+    const n = Math.max(parseInt(raw, 10) || 1, 1);
+    updateItem(item.id, { qrCount: n, perUnitQr: n > 1 });
+    setCountDrafts((d) => {
+      const next = { ...d };
+      delete next[item.id];
+      return next;
+    });
   }
 
   const [customText, setCustomText] = useState("");
@@ -147,7 +176,24 @@ export function QrCodesPage({ items }) {
               style={S.searchInput}
               placeholder="Search items…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}            />
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      {selectedIds.length > 0 && (
+        <div style={selectedBarStyle}>
+          <span>
+            {selectedIds.length} item{selectedIds.length > 1 ? "s" : ""} selected
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={S.addItemBtn} onClick={() => printItemGroups(selectedIds)}>
+              Print Selected
+            </button>
+            <button style={S.secondaryBtn} onClick={() => setSelected({})}>
+              Clear
+            </button>
           </div>
         </div>
       )}
@@ -163,137 +209,52 @@ export function QrCodesPage({ items }) {
       ) : (
         <div style={S.card}>
           {filtered.map((item) => {
-            const total = Math.max(Number(item.total) || 0, 1);
-            const codes = item.perUnitQr
-              ? Array.from({ length: total }, (_, i) => ({
-                  key: `${item.id}-${i + 1}`,
-                  payload: JSON.stringify({ name: item.name, unit: i + 1 }),
-                  label: `${item.name} #${i + 1} of ${total}`,
-                }))
-              : [{ key: item.id, payload: JSON.stringify({ name: item.name }), label: item.name }];
+            const count = countFor(item);
+            const n = Math.max(parseInt(count, 10) || 1, 1);
+            const codes =
+              n > 1
+                ? Array.from({ length: n }, (_, i) => ({
+                    key: `${item.id}-${i + 1}`,
+                    payload: JSON.stringify({ name: item.name, unit: i + 1 }),
+                    label: `${item.name} #${i + 1} of ${n}`,
+                  }))
+                : [{ key: item.id, payload: JSON.stringify({ name: item.name }), label: item.name }];
             const isOpen = Boolean(openItems[item.id]);
 
             return (
               <div key={item.id} className="accordion-item" data-item-id={item.id} style={accordionItemStyle}>
-                <div style={accordionHeaderStyle} onClick={() => toggleItem(item.id)}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: "#1a1a2e" }}>{item.name}</div>
-                    <div style={S.tinyMuted}>{codes.length === 1 ? "1 code" : `${codes.length} codes`}</div>
-                  </div>
+                <div style={accordionHeaderStyle}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <button
+                    <input
                       className="no-print"
+                      type="checkbox"
+                      checked={Boolean(selected[item.id])}
+                      onChange={() => toggleSelected(item.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <div onClick={() => toggleItem(item.id)} style={{ cursor: "pointer" }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: "#1a1a2e" }}>{item.name}</div>
+                      <div style={S.tinyMuted}>{n === 1 ? "1 code" : `${n} codes`}</div>
+                    </div>
+                  </div>
+                  <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#888" }}>
+                      Codes:
+                      <input
+                        type="number"
+                        min="1"
+                        style={countInputStyle}
+                        value={count}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setCountDrafts((d) => ({ ...d, [item.id]: e.target.value }))}
+                        onBlur={() => commitCount(item)}
+                      />
+                    </label>
+                    <button
                       style={printGroupBtnStyle}
                       onClick={(e) => {
                         e.stopPropagation();
-                        printItemGroup(item.id);
+                        printItemGroups([item.id]);
                       }}
                     >
                       Print All
-                    </button>
-                    <span style={{ color: "#bbb", fontSize: 18 }}>{isOpen ? "⌄" : "›"}</span>
-                  </div>
-                </div>
-                <div className="accordion-body" style={{ display: isOpen ? "block" : "none", paddingBottom: 14 }}>
-                  <div className="qr-print-grid" style={qrGridStyle}>
-                    {codes.map((entry) => (
-                      <div key={entry.key} className="qr-print-card" data-key={entry.key} style={qrCardStyle}>
-                        <div style={brandHeaderStyle}>CEPC-Lubbock</div>
-                        <QRBox payload={entry.payload} color={BRAND_BLUE} />
-                        <div style={qrLabelStyle}>{entry.label}</div>
-                        <button className="no-print" style={printOneBtnStyle} onClick={() => printOneCode(entry.key)}>
-                          Print This Code
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          .qr-page-root, .qr-page-root * { visibility: visible; }
-          .qr-page-root { position: absolute; left: 0; top: 0; width: 100%; }
-          .accordion-body { display: block !important; }
-          .qr-print-card { page-break-inside: avoid; box-shadow: none !important; }
-          .no-print { display: none !important; }
-          .qr-page-root:has(.qr-print-card.qr-print-only) .qr-print-card:not(.qr-print-only) {
-            display: none;
-          }
-          .qr-page-root:has(.accordion-item.qr-print-only-group) .accordion-item:not(.qr-print-only-group) {
-            display: none;
-          }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-const accordionItemStyle = { borderBottom: "1px solid #eee" };
-const accordionHeaderStyle = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: "12px 4px",
-  cursor: "pointer",
-};
-const printGroupBtnStyle = {
-  background: "#eef0f5",
-  color: NAVY,
-  border: "none",
-  borderRadius: 6,
-  padding: "5px 10px",
-  fontSize: 11,
-  fontWeight: 700,
-  cursor: "pointer",
-};
-
-const qrGridStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-  gap: 32,
-  marginTop: 10,
-};
-
-const qrCardStyle = {
-  background: "#fff",
-  borderRadius: 10,
-  padding: 14,
-  textAlign: "center",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-  border: "1px dashed #bbb",
-};
-
-const brandHeaderStyle = {
-  fontSize: 15,
-  fontWeight: 800,
-  letterSpacing: 0.5,
-  textTransform: "uppercase",
-  color: BRAND_BLUE,
-  marginBottom: 4,
-};
-
-const qrLabelStyle = {
-  fontSize: 12,
-  fontWeight: 700,
-  marginTop: 6,
-  color: "#1a1a2e",
-};
-
-const printOneBtnStyle = {
-  marginTop: 8,
-  width: "100%",
-  background: "#eef0f5",
-  color: NAVY,
-  border: "none",
-  borderRadius: 6,
-  padding: "6px 0",
-  fontSize: 11,
-  fontWeight: 700,
-  cursor: "pointer",
-};

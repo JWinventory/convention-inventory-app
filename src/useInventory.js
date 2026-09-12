@@ -24,6 +24,9 @@ export function useInventory() {
   const [items, setItems] = useState([]);
   const [orders, setOrders] = useState([]);
   const [notes, setNotes] = useState("");
+  const [volunteers, setVolunteersState] = useState([]);
+  const [reviewerName, setReviewerNameState] = useState("");
+  const [reviewerEmail, setReviewerEmailState] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState("yellow"); // green | yellow | red
   const [ready, setReady] = useState(false);
@@ -64,14 +67,21 @@ export function useInventory() {
     return () => unsub();
   }, []);
 
-  // live shared notes
+  // live shared settings: notes, the volunteer roster, and the one
+  // fixed reviewer (name + email for the review-needed notification).
   useEffect(() => {
     if (!firebaseConfigured) return;
     const ref = doc(db, META_DOC);
     const unsub = onSnapshot(
       ref,
       (snap) => {
-        if (snap.exists()) setNotes(snap.data().notes || "");
+        if (snap.exists()) {
+          const d = snap.data();
+          setNotes(d.notes || "");
+          setVolunteersState(Array.isArray(d.volunteers) ? d.volunteers : []);
+          setReviewerNameState(d.reviewerName || "");
+          setReviewerEmailState(d.reviewerEmail || "");
+        }
       },
       () => {}
     );
@@ -100,6 +110,8 @@ export function useInventory() {
         note: item.note || "",
         images,
         img: images[0] || null, // kept for backward compatibility with older code paths
+        events: Array.isArray(item.events) ? item.events : [], // empty = visible for every event
+        perUnitQr: Boolean(item.perUnitQr),
         out: 0,
         log: [],
       });
@@ -131,96 +143,3 @@ export function useInventory() {
       await deleteDoc(doc(db, ITEMS_COL, id));
       setSyncStatus("green");
     } catch (e) {
-      setSyncStatus("red");
-      throw e;
-    }
-  }, []);
-
-  const applyCheckChange = useCallback(async (id, delta, who) => {
-    setSyncStatus("yellow");
-    try {
-      const ref = doc(db, ITEMS_COL, id);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return;
-      const data = snap.data();
-      let nextOut = (data.out || 0) + delta;
-      if (nextOut < 0) nextOut = 0;
-      if (nextOut > data.total) nextOut = data.total;
-      const entry = {
-        who: who || "Unnamed volunteer",
-        action: delta > 0 ? "Checked OUT" : "Checked IN",
-        qty: Math.abs(delta),
-        at: new Date().toLocaleString(),
-      };
-      const nextLog = [entry, ...(data.log || [])].slice(0, 25);
-      await updateDoc(ref, { out: nextOut, log: nextLog });
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-    }
-  }, []);
-
-  // Zeroes out every item's checked-out count, making everything show
-  // as fully available again. Used after an order is submitted, so the
-  // catalog is reset and ready for the next event.
-  const resetAllAvailable = useCallback(async () => {
-    setSyncStatus("yellow");
-    try {
-      const snap = await getDocs(collection(db, ITEMS_COL));
-      await Promise.all(
-        snap.docs.map((d) => updateDoc(doc(db, ITEMS_COL, d.id), { out: 0, log: [] }))
-      );
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-    }
-  }, []);
-
-  const addOrder = useCallback(async (order) => {
-    setSyncStatus("yellow");
-    try {
-      await addDoc(collection(db, ORDERS_COL), {
-        requesterName: order.requester.name || "",
-        requesterPhone: order.requester.phone || "",
-        requesterEmail: order.requesterEmail || "",
-        eventDate: order.requester.eventDate || "",
-        pickupDate: order.requester.pickupDate || "",
-        returnDate: order.requester.returnDate || "",
-        items: order.items, // [{ name, qty }]
-        notes: order.notes || "",
-        createdAtMs: Date.now(),
-        createdAtLabel: new Date().toLocaleString(),
-      });
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-    }
-  }, []);
-
-  const saveNotes = useCallback(async (text) => {
-    setSyncStatus("yellow");
-    try {
-      await setDoc(doc(db, META_DOC), { notes: text, updatedAt: serverTimestamp() }, { merge: true });
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-    }
-  }, []);
-
-  return {
-    items,
-    orders,
-    notes,
-    loading,
-    syncStatus,
-    ready,
-    seedIfEmpty,
-    addItem,
-    updateItem,
-    deleteItem,
-    applyCheckChange,
-    resetAllAvailable,
-    addOrder,
-    saveNotes,
-  };
-}

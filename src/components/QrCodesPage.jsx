@@ -258,3 +258,135 @@ export function QrCodesPage({ items, updateItem }) {
                       }}
                     >
                       Print All
+                    </button>
+                    <span style={{ color: "#bbb", fontSize: 18, cursor: "pointer" }} onClick={() => toggleItem(item.id)}>
+                      {isOpen ? "⌄" : "›"}
+                    </span>
+                  </div>
+                </div>
+                <div className="accordion-body" style={{ display: isOpen ? "block" : "none", paddingBottom: 14 }}>
+                  <div className="qr-print-grid" style={qrGridStyle}>
+                    {codes.map((entry) => (
+                      <div key={entry.key} className="qr-print-card" data-key={entry.key} style={qrCardStyle}>
+                        <div style={brandHeaderStyle}>CEPC-Lubbock</div>
+                        <QRBox payload={entry.payload} color={BRAND_BLUE} />
+                        <div style={qrLabelStyle}>{entry.label}</div>
+                        <button className="no-print" style={printOneBtnStyle} onClick={() => printOneCode(entry.key)}>
+                          Print This Code
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .qr-page-root, .qr-page-root * { visibility: visible; }
+          .qr-page-root { position: absolute; left: 0; top: 0; width: 100%; }
+          .accordion-body { display: block !important; }
+          .qr-print-card { page-break-inside: avoid; box-shadow: none !important; }
+          .no-print { display: none !important; }
+          .qr-page-root:has(.qr-print-card.qr-print-only) .qr-print-card:not(.qr-print-only) {
+            display: none;
+          }
+          .qr-page-root:has(.accordion-item.qr-print-only-group) .accordion-item:not(.qr-print-only-group) {
+            display: none;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+const accordionItemStyle = { borderBottom: "1px solid #eee" };
+const accordionHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "12px 4px",
+  gap: 10,
+};
+const printGroupBtnStyle = {
+  background: "#eef0f5",
+  color: NAVY,
+  border: "none",
+  borderRadius: 6,
+  padding: "5px 10px",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+const countInputStyle = {
+  width: 46,
+  fontSize: 12,
+  padding: "3px 4px",
+  borderRadius: 6,
+  border: "1px solid #d9dce3",
+  textAlign: "center",
+};
+
+const selectedBarStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  background: "#eaf3fc",
+  border: "1px solid #b8d9f5",
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#2471a3",
+  marginBottom: 14,
+};
+
+const qrGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+  gap: 32,
+  marginTop: 10,
+};
+
+const qrCardStyle = {
+  background: "#fff",
+  borderRadius: 10,
+  padding: 14,
+  textAlign: "center",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+  border: "1px dashed #bbb",
+};
+
+const brandHeaderStyle = {
+  fontSize: 15,
+  fontWeight: 800,
+  letterSpacing: 0.5,
+  textTransform: "uppercase",
+  color: BRAND_BLUE,
+  marginBottom: 4,
+};
+
+const qrLabelStyle = {
+  fontSize: 12,
+  fontWeight: 700,
+  marginTop: 6,
+  color: "#1a1a2e",
+};
+
+const printOneBtnStyle = {
+  marginTop: 8,
+  width: "100%",
+  background: "#eef0f5",
+  color: NAVY,
+  border: "none",
+  borderRadius: 6,
+  padding: "6px 0",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+};

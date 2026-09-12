@@ -7,7 +7,10 @@ export function SubmitModal({ requester, checkedOutItems, email, setEmail, notes
   const [status, setStatus] = useState("idle"); // idle | sending | done | error
   const [errorMsg, setErrorMsg] = useState("");
 
+  const emailValid = email.trim().includes("@");
+
   async function handleSubmit() {
+    if (!emailValid) return;
     setStatus("sending");
     setErrorMsg("");
     try {
@@ -21,12 +24,14 @@ export function SubmitModal({ requester, checkedOutItems, email, setEmail, notes
           notes,
         }),
       });
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setErrorMsg(data.error || "Something went wrong sending the notification.");
         setStatus("error");
         return;
       }
+
       if (onOrderCreated) {
         onOrderCreated({
           requester,
@@ -70,6 +75,7 @@ export function SubmitModal({ requester, checkedOutItems, email, setEmail, notes
           Event {requester.eventDate || "—"} · Pickup {requester.pickupDate || "—"} · Return {requester.returnDate || "—"}
         </div>
       </div>
+
       <div style={S.summaryListWrap}>
         {checkedOutItems.length === 0 && <div style={S.tinyMuted}>No items checked out yet.</div>}
         {checkedOutItems.map((it) => (
@@ -79,16 +85,20 @@ export function SubmitModal({ requester, checkedOutItems, email, setEmail, notes
           </div>
         ))}
       </div>
+
       <label style={S.fieldLabel}>
-        Your email (optional, so the coordinator can reply)
+        Your email (required, so we can notify you when your order is ready)
         <input style={S.fieldInput} type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
       </label>
+
       <label style={S.fieldLabel}>
-        Notes for the equipment coordinator
+        Notes for the inventory team
         <textarea style={S.textarea} rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </label>
+
       {status === "error" && <div style={S.errorText}>{errorMsg}</div>}
-      <button style={S.primaryBtn} disabled={status === "sending"} onClick={handleSubmit}>
+
+      <button style={S.primaryBtn} disabled={status === "sending" || !emailValid} onClick={handleSubmit}>
         {status === "sending" ? "Sending…" : "Submit & Notify"}
       </button>
     </Modal>

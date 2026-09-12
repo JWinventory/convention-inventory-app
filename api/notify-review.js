@@ -1,6 +1,6 @@
-// Vercel serverless function — emails the designated reviewer whenever
-// a new order is submitted and needs review. Reuses the same
-// RESEND_API_KEY already configured for api/notify.js and api/notify-ready.js.
+// Vercel serverless function — emails the reviewer whenever a new
+// order is submitted and needs their review. Reuses the same
+// RESEND_API_KEY already configured for the other notify endpoints.
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -15,15 +15,21 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { reviewerEmail, requester, eventType, eventDate, items } = req.body || {};
+  const { reviewerEmail, requester, items } = req.body || {};
   if (!requester || !Array.isArray(items)) {
     res.status(400).json({ error: "Missing request details or item list." });
     return;
   }
 
-  // No reviewer email on file — nothing to send, but this isn't an
-  // error; the order still shows up in the Orders page either way.
-  if (!reviewerEmail) {
+  // Reviewer Email can hold one or more comma-separated addresses.
+  const recipients = (reviewerEmail || "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+
+  // No reviewer email(s) on file — nothing to send, but not an error;
+  // the order still shows up in the Orders page banner either way.
+  if (recipients.length === 0) {
     res.status(200).json({ ok: true, skipped: "no-email" });
     return;
   }
@@ -33,12 +39,11 @@ export default async function handler(req, res) {
 
 Requester: ${requester.name || "—"}
 Phone: ${requester.phone || "—"}
-Event: ${eventType || "—"} (${eventDate || "—"})
 
 Items requested:
 ${itemLines || "(none)"}
 
-Open the app and go to Admin > Orders to review it.
+Open the app's Admin > Orders tab to review it.
 `;
 
   try {
@@ -50,8 +55,8 @@ Open the app and go to Admin > Orders to review it.
       },
       body: JSON.stringify({
         from: "Convention Inventory <onboarding@resend.dev>",
-        to: [reviewerEmail],
-        subject: "New equipment request needs review",
+        to: recipients,
+        subject: "New request needs your review",
         text,
       }),
     });

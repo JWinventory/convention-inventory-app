@@ -1,135 +1,101 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { S } from "../styles";
-import { AdminPage } from "./AdminPage";
-import { OrdersPage } from "./OrdersPage";
-import { OrderHistoryPage } from "./OrderHistoryPage";
-import { QrCodesPage } from "./QrCodesPage";
-import { EmergencyChecklistPage } from "./EmergencyChecklistPage";
 
-// Wraps the Admin section: one password gate, then a submenu that
-// switches between the catalog manager, Orders, History, QR Codes,
-// and the Emergency checklist — all under the same "Admin" tab.
-export function AdminHub({
-  items,
-  orders,
-  addItem,
-  updateItem,
-  deleteItem,
-  seedIfEmpty,
-  syncStatus,
-  onMarkReady,
-  volunteers,
-  reviewerName,
-  reviewerEmail,
-  onSaveVolunteers,
-  onSaveReviewerSettings,
-  onUpdateOrder,
-}) {
-  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem("adminUnlocked") === "1");
-  const [pw, setPw] = useState("");
-  const [pwError, setPwError] = useState("");
-  const [checking, setChecking] = useState(false);
-  const [section, setSection] = useState("catalog"); // catalog | orders | history | qrcodes | emergency
+// Every order that's been fully checked back in lands here permanently
+// — it's off the Orders page so that list stays focused on what's
+// actually in progress, but nothing is ever deleted, so past requests
+// can always be looked up.
+export function OrderHistoryPage({ orders, items }) {
+  const [search, setSearch] = useState("");
 
-  async function handleUnlock(e) {
-    e.preventDefault();
-    if (!pw) return;
-    setChecking(true);
-    setPwError("");
-    try {
-      const res = await fetch("/api/verify-admin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pw }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        sessionStorage.setItem("adminUnlocked", "1");
-        setUnlocked(true);
-      } else {
-        setPwError("Incorrect password.");
-      }
-    } catch (err) {
-      setPwError("Couldn't verify password — check your connection.");
-    } finally {
-      setChecking(false);
-      setPw("");
-    }
-  }
+  const completedOrders = useMemo(() => {
+    return orders
+      .map((order) => {
+        const lineItems = (order.items || []).map((li) => {
+          const liveItem = items.find((i) => i.name === li.name);
+          const stillOut = liveItem ? Math.min(li.qty, liveItem.out || 0) : 0;
+          return { ...li, stillOut, exists: Boolean(liveItem) };
+        });
+        const isActive = lineItems.some((li) => li.stillOut > 0);
+        return {
+          ...order,
+          lineItems,
+          isActive,
+          reviewedBy: Array.isArray(order.reviewedBy) ? order.reviewedBy : [],
+          assignedFillers: Array.isArray(order.assignedFillers) ? order.assignedFillers : [],
+        };
+      })
+      .filter((o) => !o.isActive);
+  }, [orders, items]);
 
-  if (!unlocked) {
-    return (
-      <div style={S.card}>
-        <h2 style={S.cardTitle}>Admin Access</h2>
-        <p style={S.tinyMuted}>Enter the admin password to manage the catalog.</p>
-        <form onSubmit={handleUnlock}>
-          <label style={S.fieldLabel}>
-            Password
-            <input
-              style={S.fieldInput}
-              type="password"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              autoFocus
-            />
-          </label>
-          {pwError && <div style={S.errorText}>{pwError}</div>}
-          <button style={S.primaryBtn} type="submit" disabled={checking || !pw}>
-            {checking ? "Checking…" : "Unlock"}
-          </button>
-        </form>
-      </div>
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return completedOrders;
+    return completedOrders.filter(
+      (o) =>
+        (o.requesterName || "").toLowerCase().includes(q) ||
+        (o.lineItems || []).some((li) => li.name.toLowerCase().includes(q)) ||
+        (o.assignedFillers || []).some((n) => n.toLowerCase().includes(q))
     );
-  }
-
-  const SECTIONS = [
-    { key: "catalog", label: "Catalog" },
-    { key: "orders", label: "Orders" },
-    { key: "history", label: "History" },
-    { key: "qrcodes", label: "QR Codes" },
-    { key: "emergency", label: "Emergency" },
-  ];
+  }, [completedOrders, search]);
 
   return (
     <div>
-      <div style={S.catTabs}>
-        {SECTIONS.map((s) => (
-          <button
-            key={s.key}
-            onClick={() => setSection(s.key)}
-            style={{ ...S.catTab, ...(section === s.key ? S.catTabActive : {}) }}
-          >
-            {s.label}
-          </button>
-        ))}
+      <div style={S.card}>
+        <h2 style={S.cardTitle}>Order History</h2>
+        <div style={S.tinyMuted}>
+          Every order that's been fully checked back in, kept here permanently for reference.
+        </div>
       </div>
 
-      {section === "catalog" && (
-        <AdminPage
-          items={items}
-          addItem={addItem}
-          updateItem={updateItem}
-          deleteItem={deleteItem}
-          seedIfEmpty={seedIfEmpty}
-          syncStatus={syncStatus}
-        />
+      <div style={S.toolbar}>
+        <div style={S.searchWrap}>
+          <input
+            style={S.searchInput}
+            placeholder="Search by requester, item, or filler name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={S.card}>
+          <p style={S.tinyMuted}>{search ? `No completed orders match "${search}".` : "No completed orders yet."}</p>
+        </div>
+      ) : (
+        filtered.map((order) => (
+          <div key={order.id} style={S.card}>
+            <div style={S.cardHeaderRow}>
+              <span style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e" }}>
+                {order.requesterName || "Unnamed requester"}
+              </span>
+              <div style={{ ...S.tinyMuted, textAlign: "right" }}>Submitted {order.createdAtLabel || "—"}</div>
+            </div>
+            <div style={S.tinyMuted}>
+              {order.eventType || "—"} · Event {order.eventDate || "—"} · Pickup {order.pickupDate || "—"} · Return{" "}
+              {order.returnDate || "—"}
+            </div>
+            <div style={{ ...S.summaryListWrap, marginTop: 10 }}>
+              {order.lineItems.map((li, idx) => (
+                <div key={idx} style={S.summaryRow}>
+                  <span>{li.name}</span>
+                  <span style={S.summaryQty}>×{li.qty}</span>
+                </div>
+              ))}
+            </div>
+            <div style={S.tinyMuted}>
+              Reviewed by {order.reviewedBy.join(" & ") || "—"} · Filled by{" "}
+              {order.assignedFillers.join(", ") || "—"}
+            </div>
+            {order.notes && (
+              <div style={{ ...S.tinyMuted, marginTop: 6 }}>
+                <strong>Notes:</strong> {order.notes}
+              </div>
+            )}
+          </div>
+        ))
       )}
-      {section === "orders" && (
-        <OrdersPage
-          orders={orders}
-          items={items}
-          onMarkReady={onMarkReady}
-          volunteers={volunteers}
-          reviewerName={reviewerName}
-          reviewerEmail={reviewerEmail}
-          onSaveVolunteers={onSaveVolunteers}
-          onSaveReviewerSettings={onSaveReviewerSettings}
-          onUpdateOrder={onUpdateOrder}
-        />
-      )}
-      {section === "history" && <OrderHistoryPage orders={orders} items={items} />}
-      {section === "qrcodes" && <QrCodesPage items={items} />}
-      {section === "emergency" && <EmergencyChecklistPage items={items} />}
     </div>
   );
 }

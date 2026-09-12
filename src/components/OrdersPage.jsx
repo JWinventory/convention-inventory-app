@@ -1,13 +1,23 @@
 import React, { useMemo, useState } from "react";
 import { S } from "../styles";
 
-export function OrdersPage({ orders, items, onMarkReady }) {
+export function OrdersPage({
+  orders,
+  items,
+  onMarkReady,
+  volunteers,
+  reviewerName,
+  reviewerEmail,
+  onSaveVolunteers,
+  onSaveReviewerSettings,
+  onUpdateOrder,
+}) {
   const [search, setSearch] = useState("");
 
   // For each order, look up the *current* out-count for every item it listed
-  // (matched by name). An order is "Active" while any of its items are still
-  // checked out, and flips to "Completed" once everything's back in — but it
-  // stays in this list either way, so there's always a full history to browse.
+  // (matched by name). An order stays here while it's still active (anything
+  // still checked out); once fully checked back in it disappears from this
+  // page entirely and shows up in Admin > History instead.
   const allOrders = useMemo(() => {
     return orders.map((order) => {
       const lineItems = (order.items || []).map((li) => {
@@ -17,31 +27,49 @@ export function OrdersPage({ orders, items, onMarkReady }) {
       });
       const isActive = lineItems.some((li) => li.stillOut > 0);
       const status = order.status || "submitted";
-      return { ...order, lineItems, isActive, status };
+      const reviewedBy = Array.isArray(order.reviewedBy) ? order.reviewedBy : [];
+      const assignedFillers = Array.isArray(order.assignedFillers) ? order.assignedFillers : [];
+      return { ...order, lineItems, isActive, status, reviewedBy, assignedFillers };
     });
   }, [orders, items]);
 
-  const filtered = useMemo(() => {
+  const activeOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return allOrders;
-    return allOrders.filter(
-      (o) =>
+    return allOrders.filter((o) => {
+      if (!o.isActive) return false;
+      if (!q) return true;
+      return (
         (o.requesterName || "").toLowerCase().includes(q) ||
         (o.lineItems || []).some((li) => li.name.toLowerCase().includes(q))
-    );
+      );
+    });
   }, [allOrders, search]);
 
-  const activeOrders = filtered.filter((o) => o.isActive);
-  const completedOrders = filtered.filter((o) => !o.isActive);
+  const needsReviewCount = activeOrders.filter((o) => o.status === "submitted").length;
 
   return (
     <div>
+      <VolunteerSettings
+        volunteers={volunteers}
+        reviewerName={reviewerName}
+        reviewerEmail={reviewerEmail}
+        onSaveVolunteers={onSaveVolunteers}
+        onSaveReviewerSettings={onSaveReviewerSettings}
+      />
+
+      {needsReviewCount > 0 && (
+        <div style={reviewBannerStyle}>
+          {needsReviewCount === 1
+            ? "1 order needs review before it can be assigned."
+            : `${needsReviewCount} orders need review before they can be assigned.`}
+        </div>
+      )}
+
       <div style={S.card}>
         <h2 style={S.cardTitle}>Orders</h2>
         <div style={S.tinyMuted}>
-          Every submitted request, kept here permanently. Mark a request Ready once it's been gathered —
-          this emails the requester and unlocks their check-in screen. An order flips to Completed once
-          everything's back in.
+          Every request moves through review, assignment, and fulfillment here. Once everything's checked
+          back in, it moves to the History tab automatically.
         </div>
       </div>
 
@@ -59,28 +87,144 @@ export function OrdersPage({ orders, items, onMarkReady }) {
       <h3 style={{ ...S.cardTitle, marginTop: 18 }}>Active ({activeOrders.length})</h3>
       {activeOrders.length === 0 && (
         <div style={S.card}>
-          <div style={S.tinyMuted}>Nothing currently out under a submitted request.</div>
+          <div style={S.tinyMuted}>Nothing currently active.</div>
         </div>
       )}
       {activeOrders.map((order) => (
-        <OrderCard key={order.id} order={order} onMarkReady={onMarkReady} />
-      ))}
-
-      <h3 style={{ ...S.cardTitle, marginTop: 24 }}>Completed ({completedOrders.length})</h3>
-      {completedOrders.length === 0 && (
-        <div style={S.card}>
-          <div style={S.tinyMuted}>No completed orders yet.</div>
-        </div>
-      )}
-      {completedOrders.map((order) => (
-        <OrderCard key={order.id} order={order} onMarkReady={onMarkReady} />
+        <OrderCard
+          key={order.id}
+          order={order}
+          volunteers={volunteers}
+          reviewerName={reviewerName}
+          onMarkReady={onMarkReady}
+          onUpdateOrder={onUpdateOrder}
+        />
       ))}
     </div>
   );
 }
 
-function OrderCard({ order, onMarkReady }) {
+function VolunteerSettings({ volunteers, reviewerName, reviewerEmail, onSaveVolunteers, onSaveReviewerSettings }) {
+  const [open, setOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [emailDraft, setEmailDraft] = useState(reviewerEmail || "");
+
+  function addVolunteer() {
+    const name = newName.trim();
+    if (!name || volunteers.includes(name)) return;
+    onSaveVolunteers([...volunteers, name]);
+    setNewName("");
+  }
+
+  function removeVolunteer(name) {
+    onSaveVolunteers(volunteers.filter((v) => v !== name));
+    if (reviewerName === name) {
+      onSaveReviewerSettings("", reviewerEmail);
+    }
+  }
+
+  function setReviewer(name) {
+    onSaveReviewerSettings(name, emailDraft);
+  }
+
+  function saveEmail() {
+    onSaveReviewerSettings(reviewerName, emailDraft.trim());
+  }
+
+  if (!open) {
+    return (
+      <div style={{ textAlign: "center", margin: "4px 0 16px" }}>
+        <button style={S.editBtn} onClick={() => setOpen(true)}>
+          Manage Volunteers &amp; Reviewer
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={S.card}>
+      <div style={S.cardHeaderRow}>
+        <h2 style={S.cardTitle}>Volunteers &amp; Reviewer</h2>
+        <button style={S.editBtn} onClick={() => setOpen(false)}>
+          Done
+        </button>
+      </div>
+
+      <label style={S.fieldLabel}>Add a volunteer</label>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <input
+          style={{ ...S.fieldInput, flex: 1 }}
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Full name"
+          onKeyDown={(e) => e.key === "Enter" && addVolunteer()}
+        />
+        <button style={S.addItemBtn} onClick={addVolunteer} disabled={!newName.trim()}>
+          Add
+        </button>
+      </div>
+
+      {volunteers.length === 0 ? (
+        <p style={S.tinyMuted}>No volunteers added yet.</p>
+      ) : (
+        <div style={{ ...S.summaryListWrap, marginBottom: 16 }}>
+          {volunteers.map((v) => (
+            <div key={v} style={S.summaryRow}>
+              <span>{v}</span>
+              <button style={S.adminDeleteBtn} onClick={() => removeVolunteer(v)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <label style={S.fieldLabel}>
+        Reviewer
+        <select style={S.fieldInput} value={reviewerName || ""} onChange={(e) => setReviewer(e.target.value)}>
+          <option value="">Select…</option>
+          {volunteers.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label style={S.fieldLabel}>
+        Reviewer Email (for the "needs review" notification)
+        <input
+          style={S.fieldInput}
+          type="email"
+          value={emailDraft}
+          onChange={(e) => setEmailDraft(e.target.value)}
+          onBlur={saveEmail}
+          placeholder="reviewer@example.com"
+        />
+      </label>
+      <p style={S.tinyMuted}>This person must confirm a request before it can be assigned to be filled.</p>
+    </div>
+  );
+}
+
+function OrderCard({ order, volunteers, reviewerName, onMarkReady, onUpdateOrder }) {
   const [sending, setSending] = useState(false);
+  const [pickedFillers, setPickedFillers] = useState(order.assignedFillers || []);
+
+  const reviewerConfigured = Boolean(reviewerName);
+  const alreadyReviewed = order.reviewedBy.includes(reviewerName);
+
+  function markReviewed() {
+    onUpdateOrder(order.id, { reviewedBy: [reviewerName], status: "reviewed" });
+  }
+
+  function toggleFiller(name) {
+    setPickedFillers((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
+  }
+
+  function handleAssign() {
+    if (pickedFillers.length === 0) return;
+    onUpdateOrder(order.id, { assignedFillers: pickedFillers, status: "assigned" });
+  }
 
   async function handleMarkReady() {
     setSending(true);
@@ -99,7 +243,7 @@ function OrderCard({ order, onMarkReady }) {
             <span style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e" }}>
               {order.requesterName || "Unnamed requester"}
             </span>
-            <StatusTag active={order.isActive} status={order.status} />
+            <StatusTag status={order.status} />
           </div>
           <div style={S.tinyMuted}>
             {order.requesterPhone || "—"}
@@ -113,7 +257,6 @@ function OrderCard({ order, onMarkReady }) {
         {order.eventType || "—"} · Event {order.eventDate || "—"} · Pickup {order.pickupDate || "—"} · Return{" "}
         {order.returnDate || "—"}
       </div>
-
       <div style={{ ...S.summaryListWrap, marginTop: 10 }}>
         {order.lineItems.map((li, idx) => (
           <div key={idx} style={S.summaryRow}>
@@ -134,31 +277,82 @@ function OrderCard({ order, onMarkReady }) {
         </div>
       )}
 
-      {order.isActive && order.status === "submitted" && (
-        <button style={{ ...S.primaryBtn, marginTop: 10 }} disabled={sending} onClick={handleMarkReady}>
-          {sending ? "Marking Ready…" : "Mark Ready & Notify Requester"}
-        </button>
+      {/* Phase 2, step 1: review */}
+      {order.status === "submitted" && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>
+          {!reviewerConfigured ? (
+            <p style={S.tinyMuted}>Set a reviewer above under "Manage Volunteers & Reviewer" to continue.</p>
+          ) : (
+            <button style={S.primaryBtn} onClick={markReviewed} disabled={alreadyReviewed}>
+              Mark as Reviewed ({reviewerName})
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Phase 2, step 2: assign fillers */}
+      {order.status === "reviewed" && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#555", marginBottom: 6 }}>
+            Reviewed by {reviewerName} — assign who will fill this order
+          </div>
+          {volunteers.length === 0 ? (
+            <p style={S.tinyMuted}>Add volunteers above to assign someone.</p>
+          ) : (
+            <>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+                {volunteers.map((v) => (
+                  <label key={v} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                    <input type="checkbox" checked={pickedFillers.includes(v)} onChange={() => toggleFiller(v)} />
+                    {v}
+                  </label>
+                ))}
+              </div>
+              <button style={S.primaryBtn} disabled={pickedFillers.length === 0} onClick={handleAssign}>
+                Assign to Fill
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Phase 2, step 3: fill + notify */}
+      {order.status === "assigned" && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>
+          <div style={S.tinyMuted}>
+            Assigned to: <strong>{order.assignedFillers.join(", ")}</strong>
+          </div>
+          <button style={{ ...S.primaryBtn, marginTop: 10 }} disabled={sending} onClick={handleMarkReady}>
+            {sending ? "Marking Ready…" : "Mark Ready & Notify Requester"}
+          </button>
+        </div>
+      )}
+
+      {/* Fulfilled: waiting on the requester to check items back in */}
+      {order.status === "fulfilled" && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>
+          <div style={S.tinyMuted}>
+            Reviewed by {order.reviewedBy.join(", ") || "—"} · Filled by {order.assignedFillers.join(", ") || "—"}
+          </div>
+          <div style={{ ...S.tinyMuted, marginTop: 4 }}>Ready for pickup — waiting on the requester to check items back in.</div>
+        </div>
       )}
     </div>
   );
 }
 
-function StatusTag({ active, status }) {
-  let label = "Completed";
-  let style = { background: "#e9f9ef", color: "#1e8449" };
-  if (active) {
-    if (status === "fulfilled") {
-      label = "Ready for Pickup";
-      style = { background: "#eaf3fc", color: "#2471a3" };
-    } else {
-      label = "Preparing";
-      style = { background: "#fdecea", color: "#c0392b" };
-    }
-  }
+function StatusTag({ status }) {
+  const map = {
+    submitted: { label: "Needs Review", style: { background: "#fdecea", color: "#c0392b" } },
+    reviewed: { label: "Needs Assignment", style: { background: "#fff4e5", color: "#8a5a00" } },
+    assigned: { label: "Being Filled", style: { background: "#eaf3fc", color: "#2471a3" } },
+    fulfilled: { label: "Ready for Pickup", style: { background: "#e9f9ef", color: "#1e8449" } },
+  };
+  const cfg = map[status] || map.submitted;
   return (
     <span
       style={{
-        ...style,
+        ...cfg.style,
         fontSize: 11,
         fontWeight: 700,
         borderRadius: 20,
@@ -167,7 +361,18 @@ function StatusTag({ active, status }) {
         letterSpacing: 0.3,
       }}
     >
-      {label}
+      {cfg.label}
     </span>
   );
 }
+
+const reviewBannerStyle = {
+  background: "#fdecea",
+  border: "1px solid #f5b7b1",
+  color: "#c0392b",
+  borderRadius: 10,
+  padding: "12px 14px",
+  fontSize: 13,
+  fontWeight: 700,
+  marginBottom: 14,
+};

@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import { S } from "../styles";
 import { AdminPage } from "./AdminPage";
 import { OrdersPage } from "./OrdersPage";
+import { OrderHistoryPage } from "./OrderHistoryPage";
 import { QrCodesPage } from "./QrCodesPage";
 import { EmergencyChecklistPage } from "./EmergencyChecklistPage";
 
 // Wraps the Admin section: one password gate, then a submenu that
-// switches between the catalog manager, Orders, QR Codes, and the
-// Emergency checklist — all under the same "Admin" tab.
+// switches between the catalog manager, Orders, History, QR Codes,
+// and the Emergency checklist — all under the same "Admin" tab.
 export function AdminHub({
   items,
   orders,
@@ -17,12 +18,18 @@ export function AdminHub({
   seedIfEmpty,
   syncStatus,
   onMarkReady,
+  volunteers,
+  reviewerName,
+  reviewerEmail,
+  onSaveVolunteers,
+  onSaveReviewerSettings,
+  onUpdateOrder,
 }) {
   const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem("adminUnlocked") === "1");
   const [pw, setPw] = useState("");
   const [pwError, setPwError] = useState("");
   const [checking, setChecking] = useState(false);
-  const [section, setSection] = useState("catalog"); // catalog | orders | qrcodes | emergency
+  const [section, setSection] = useState("catalog"); // catalog | orders | history | qrcodes | emergency
 
   async function handleUnlock(e) {
     e.preventDefault();
@@ -78,6 +85,7 @@ export function AdminHub({
   const SECTIONS = [
     { key: "catalog", label: "Catalog" },
     { key: "orders", label: "Orders" },
+    { key: "history", label: "History" },
     { key: "qrcodes", label: "QR Codes" },
     { key: "emergency", label: "Emergency" },
   ];
@@ -106,7 +114,20 @@ export function AdminHub({
           syncStatus={syncStatus}
         />
       )}
-      {section === "orders" && <OrdersPage orders={orders} items={items} onMarkReady={onMarkReady} />}
+      {section === "orders" && (
+        <OrdersPage
+          orders={orders}
+          items={items}
+          onMarkReady={onMarkReady}
+          volunteers={volunteers}
+          reviewerName={reviewerName}
+          reviewerEmail={reviewerEmail}
+          onSaveVolunteers={onSaveVolunteers}
+          onSaveReviewerSettings={onSaveReviewerSettings}
+          onUpdateOrder={onUpdateOrder}
+        />
+      )}
+      {section === "history" && <OrderHistoryPage orders={orders} items={items} />}
       {section === "qrcodes" && <QrCodesPage items={items} />}
       {section === "emergency" && <EmergencyChecklistPage items={items} />}
     </div>

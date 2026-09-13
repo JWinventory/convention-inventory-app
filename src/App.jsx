@@ -239,6 +239,33 @@ export default function App() {
     }
   }
 
+  // Force-closes an order at any stage — even if nothing's actually
+  // been filled or returned. Any of its items still checked out get
+  // returned to available first (so catalog counts stay correct),
+  // then the order is marked cancelled, which moves it to History
+  // since it's no longer "active."
+  async function handleCancelOrder(order) {
+    const requesterLabel = order.requesterName || "this requester";
+    if (
+      !window.confirm(
+        `Cancel and archive this order for ${requesterLabel}? Any items still checked out will be returned to available.`
+      )
+    ) {
+      return;
+    }
+    for (const li of order.items || []) {
+      const liveItem = items.find((i) => i.name === li.name);
+      if (liveItem) {
+        const stillOut = Math.min(li.qty, liveItem.out || 0);
+        if (stillOut > 0) {
+          // eslint-disable-next-line no-await-in-loop
+          await applyCheckChange(liveItem.id, -stillOut, "Order cancelled", "Order cancelled/archived by staff");
+        }
+      }
+    }
+    await updateOrder(order.id, { status: "cancelled" });
+  }
+
   if (!firebaseConfigured) {
     return (
       <div style={S.page}>
@@ -291,6 +318,7 @@ export default function App() {
             seedIfEmpty={seedIfEmpty}
             syncStatus={syncStatus}
             onMarkReady={handleMarkOrderReady}
+            onCancelOrder={handleCancelOrder}
             volunteers={volunteers}
             volunteersReady={volunteersReady}
             reviewerId={reviewerId}

@@ -63,6 +63,9 @@ export default function App() {
     items,
     orders,
     notes,
+    volunteers,
+    reviewerName,
+    reviewerEmail,
     syncStatus,
     seedIfEmpty,
     addItem,
@@ -71,7 +74,10 @@ export default function App() {
     applyCheckChange,
     addOrder,
     updateOrderStatus,
+    updateOrder,
     saveNotes,
+    saveVolunteers,
+    saveReviewerSettings,
   } = useInventory();
 
   const [tab, setTab] = useState("inventory"); // inventory | admin
@@ -169,6 +175,21 @@ export default function App() {
     if (id) {
       localStorage.setItem(MY_ORDER_KEY, id);
       setMyOrderId(id);
+      try {
+        await fetch("/api/notify-review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reviewerEmail,
+            requester: { name: order.requester.name, phone: order.requester.phone },
+            eventType: order.requester.eventType,
+            eventDate: order.requester.eventDate,
+            items: order.items,
+          }),
+        });
+      } catch (err) {
+        // Order is already saved even if the review-alert email fails to send.
+      }
     }
   }
 
@@ -265,6 +286,12 @@ export default function App() {
             seedIfEmpty={seedIfEmpty}
             syncStatus={syncStatus}
             onMarkReady={handleMarkOrderReady}
+            volunteers={volunteers}
+            reviewerName={reviewerName}
+            reviewerEmail={reviewerEmail}
+            onSaveVolunteers={saveVolunteers}
+            onSaveReviewerSettings={saveReviewerSettings}
+            onUpdateOrder={updateOrder}
           />
         ) : myOrderPhase !== "none" ? (
           <MyOrderStatus

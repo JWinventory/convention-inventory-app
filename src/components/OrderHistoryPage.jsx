@@ -67,9 +67,12 @@ export function OrderHistoryPage({ orders, items }) {
         filtered.map((order) => (
           <div key={order.id} style={S.card}>
             <div style={S.cardHeaderRow}>
-              <span style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e" }}>
-                {order.requesterName || "Unnamed requester"}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e" }}>
+                  {order.requesterName || "Unnamed requester"}
+                </span>
+                {order.status === "cancelled" && <span style={cancelledTagStyle}>Cancelled</span>}
+              </div>
               <div style={{ ...S.tinyMuted, textAlign: "right" }}>Submitted {order.createdAtLabel || "—"}</div>
             </div>
             <div style={S.tinyMuted}>
@@ -99,3 +102,14 @@ export function OrderHistoryPage({ orders, items }) {
     </div>
   );
 }
+
+const cancelledTagStyle = {
+  background: "#f4f5f7",
+  color: "#888",
+  fontSize: 10,
+  fontWeight: 700,
+  borderRadius: 12,
+  padding: "2px 8px",
+  textTransform: "uppercase",
+  letterSpacing: 0.3,
+};

@@ -4,7 +4,7 @@ import { S } from "../styles";
 // currentVolunteerName is who's actually logged in right now — used to
 // make sure only the designated Reviewer can click "Mark as Reviewed"
 // for themselves, not just anyone with Orders access.
-export function OrdersPage({ orders, items, onMarkReady, volunteers, reviewerId, currentVolunteerName, onUpdateOrder }) {
+export function OrdersPage({ orders, items, onMarkReady, onCancelOrder, volunteers, reviewerId, currentVolunteerName, onUpdateOrder }) {
   const [search, setSearch] = useState("");
 
   const reviewer = volunteers.find((v) => v.id === reviewerId) || null;
@@ -88,6 +88,7 @@ export function OrdersPage({ orders, items, onMarkReady, volunteers, reviewerId,
           reviewerName={reviewerName}
           currentVolunteerName={currentVolunteerName}
           onMarkReady={onMarkReady}
+          onCancelOrder={onCancelOrder}
           onUpdateOrder={onUpdateOrder}
         />
       ))}
@@ -95,12 +96,22 @@ export function OrdersPage({ orders, items, onMarkReady, volunteers, reviewerId,
   );
 }
 
-function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, onMarkReady, onUpdateOrder }) {
+function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, onMarkReady, onCancelOrder, onUpdateOrder }) {
   const [sending, setSending] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [pickedFillers, setPickedFillers] = useState(order.assignedFillers || []);
 
   const reviewerConfigured = Boolean(reviewerName);
   const isReviewer = reviewerConfigured && currentVolunteerName === reviewerName;
+
+  async function handleCancel() {
+    setCancelling(true);
+    try {
+      await onCancelOrder(order);
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   function handleMarkReviewed() {
     onUpdateOrder(order.id, { reviewedBy: [reviewerName], status: "reviewed" });
@@ -229,6 +240,12 @@ function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, 
           <div style={{ ...S.tinyMuted, marginTop: 4 }}>Ready for pickup — waiting on the requester to check items back in.</div>
         </div>
       )}
+
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", textAlign: "right" }}>
+        <button style={cancelLinkStyle} disabled={cancelling} onClick={handleCancel}>
+          {cancelling ? "Cancelling…" : "Cancel & Archive Order"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -267,4 +284,14 @@ const needsReviewBannerStyle = {
   fontSize: 13,
   fontWeight: 700,
   marginBottom: 14,
+};
+
+const cancelLinkStyle = {
+  background: "none",
+  border: "none",
+  color: "#c0392b",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+  padding: 0,
 };

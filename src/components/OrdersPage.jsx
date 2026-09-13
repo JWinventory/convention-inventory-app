@@ -1,18 +1,15 @@
 import React, { useMemo, useState } from "react";
 import { S } from "../styles";
 
-export function OrdersPage({
-  orders,
-  items,
-  onMarkReady,
-  volunteers,
-  reviewerName,
-  reviewerEmail,
-  onSaveVolunteers,
-  onSaveReviewerSettings,
-  onUpdateOrder,
-}) {
+// currentVolunteerName is who's actually logged in right now — used to
+// make sure only the designated Reviewer can click "Mark as Reviewed"
+// for themselves, not just anyone with Orders access.
+export function OrdersPage({ orders, items, onMarkReady, volunteers, reviewerId, currentVolunteerName, onUpdateOrder }) {
   const [search, setSearch] = useState("");
+
+  const reviewer = volunteers.find((v) => v.id === reviewerId) || null;
+  const reviewerName = reviewer?.name || "";
+  const volunteerNames = volunteers.map((v) => v.name);
 
   // For each order, look up the *current* out-count for every item it listed
   // (matched by name). An order stays here while it's still active (anything
@@ -49,20 +46,12 @@ export function OrdersPage({
 
   return (
     <div>
-      <VolunteerSettings
-        volunteers={volunteers}
-        reviewerName={reviewerName}
-        reviewerEmail={reviewerEmail}
-        onSaveVolunteers={onSaveVolunteers}
-        onSaveReviewerSettings={onSaveReviewerSettings}
-      />
-
       {needsReviewCount > 0 && (
         <div style={needsReviewBannerStyle}>
           {needsReviewCount === 1
             ? "1 request needs review"
             : `${needsReviewCount} requests need review`}
-          {reviewerName ? ` — ${reviewerName}, take a look below.` : " — set a reviewer above to get notified."}
+          {reviewerName ? ` — ${reviewerName}, take a look below.` : " — set a reviewer under the Volunteers tab."}
         </div>
       )}
 
@@ -95,8 +84,9 @@ export function OrdersPage({
         <OrderCard
           key={order.id}
           order={order}
-          volunteers={volunteers}
+          volunteerNames={volunteerNames}
           reviewerName={reviewerName}
+          currentVolunteerName={currentVolunteerName}
           onMarkReady={onMarkReady}
           onUpdateOrder={onUpdateOrder}
         />
@@ -105,115 +95,12 @@ export function OrdersPage({
   );
 }
 
-function VolunteerSettings({ volunteers, reviewerName, reviewerEmail, onSaveVolunteers, onSaveReviewerSettings }) {
-  const [open, setOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [emailDraft, setEmailDraft] = useState(reviewerEmail);
-
-  function addVolunteer() {
-    const name = newName.trim();
-    if (!name || volunteers.includes(name)) return;
-    onSaveVolunteers([...volunteers, name]);
-    setNewName("");
-  }
-
-  function removeVolunteer(name) {
-    onSaveVolunteers(volunteers.filter((v) => v !== name));
-    if (reviewerName === name) {
-      onSaveReviewerSettings("", reviewerEmail);
-    }
-  }
-
-  function handleReviewerChange(name) {
-    onSaveReviewerSettings(name, emailDraft);
-  }
-
-  function handleEmailBlur() {
-    if (emailDraft !== reviewerEmail) {
-      onSaveReviewerSettings(reviewerName, emailDraft);
-    }
-  }
-
-  if (!open) {
-    return (
-      <div style={{ textAlign: "center", margin: "4px 0 16px" }}>
-        <button style={S.editBtn} onClick={() => setOpen(true)}>
-          Manage Volunteers &amp; Reviewer
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div style={S.card}>
-      <div style={S.cardHeaderRow}>
-        <h2 style={S.cardTitle}>Volunteers &amp; Reviewer</h2>
-        <button style={S.editBtn} onClick={() => setOpen(false)}>
-          Done
-        </button>
-      </div>
-
-      <label style={S.fieldLabel}>Add a volunteer</label>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <input
-          style={{ ...S.fieldInput, flex: 1 }}
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="Full name"
-          onKeyDown={(e) => e.key === "Enter" && addVolunteer()}
-        />
-        <button style={S.addItemBtn} onClick={addVolunteer} disabled={!newName.trim()}>
-          Add
-        </button>
-      </div>
-
-      {volunteers.length === 0 ? (
-        <p style={S.tinyMuted}>No volunteers added yet.</p>
-      ) : (
-        <div style={{ ...S.summaryListWrap, marginBottom: 16 }}>
-          {volunteers.map((v) => (
-            <div key={v} style={S.summaryRow}>
-              <span>{v}</span>
-              <button style={S.adminDeleteBtn} onClick={() => removeVolunteer(v)}>
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <label style={S.fieldLabel}>
-        Reviewer
-        <select style={S.fieldInput} value={reviewerName || ""} onChange={(e) => handleReviewerChange(e.target.value)}>
-          <option value="">Select…</option>
-          {volunteers.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label style={S.fieldLabel}>
-        Reviewer Email(s) — separate multiple with commas
-        <input
-          style={S.fieldInput}
-          type="text"
-          value={emailDraft}
-          onChange={(e) => setEmailDraft(e.target.value)}
-          onBlur={handleEmailBlur}
-          placeholder="reviewer@example.com, another@example.com"
-        />
-      </label>
-      <p style={S.tinyMuted}>This person must mark a request as reviewed before it can be assigned.</p>
-    </div>
-  );
-}
-
-function OrderCard({ order, volunteers, reviewerName, onMarkReady, onUpdateOrder }) {
+function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, onMarkReady, onUpdateOrder }) {
   const [sending, setSending] = useState(false);
   const [pickedFillers, setPickedFillers] = useState(order.assignedFillers || []);
 
   const reviewerConfigured = Boolean(reviewerName);
+  const isReviewer = reviewerConfigured && currentVolunteerName === reviewerName;
 
   function handleMarkReviewed() {
     onUpdateOrder(order.id, { reviewedBy: [reviewerName], status: "reviewed" });
@@ -280,15 +167,17 @@ function OrderCard({ order, volunteers, reviewerName, onMarkReady, onUpdateOrder
         </div>
       )}
 
-      {/* Phase 2, step 1: review */}
+      {/* Phase 2, step 1: review — only the designated reviewer can act here */}
       {order.status === "submitted" && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>
           {!reviewerConfigured ? (
-            <p style={S.tinyMuted}>Set a reviewer above under "Manage Volunteers & Reviewer" to continue.</p>
-          ) : (
+            <p style={S.tinyMuted}>Set a reviewer under the Volunteers tab to continue.</p>
+          ) : isReviewer ? (
             <button style={S.primaryBtn} onClick={handleMarkReviewed}>
               Mark as Reviewed ({reviewerName})
             </button>
+          ) : (
+            <p style={S.tinyMuted}>Waiting on {reviewerName} to review this.</p>
           )}
         </div>
       )}
@@ -299,12 +188,12 @@ function OrderCard({ order, volunteers, reviewerName, onMarkReady, onUpdateOrder
           <div style={{ fontSize: 12, fontWeight: 700, color: "#555", marginBottom: 6 }}>
             Reviewed by {order.reviewedBy.join(", ")} — assign who will fill this order
           </div>
-          {volunteers.length === 0 ? (
-            <p style={S.tinyMuted}>Add volunteers above to assign someone.</p>
+          {volunteerNames.length === 0 ? (
+            <p style={S.tinyMuted}>Add volunteers under the Volunteers tab to assign someone.</p>
           ) : (
             <>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
-                {volunteers.map((v) => (
+                {volunteerNames.map((v) => (
                   <label key={v} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
                     <input type="checkbox" checked={pickedFillers.includes(v)} onChange={() => toggleFiller(v)} />
                     {v}
@@ -318,6 +207,7 @@ function OrderCard({ order, volunteers, reviewerName, onMarkReady, onUpdateOrder
           )}
         </div>
       )}
+
       {/* Phase 2, step 3: fill + notify */}
       {order.status === "assigned" && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>

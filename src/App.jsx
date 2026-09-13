@@ -130,7 +130,10 @@ export default function App() {
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, activeCat, search, requester.eventType]);    () => items.filter((it) => (it.out || 0) > 0),
+  }, [items, activeCat, search, requester.eventType]);
+
+  const checkedOutItems = useMemo(
+    () => items.filter((it) => (it.out || 0) > 0),
     [items]
   );
 
@@ -260,8 +263,7 @@ export default function App() {
   return (
     <div style={S.page}>
       <header style={S.header}>
-
-  const checkedOutItems = useMemo(        <div style={S.headerTop}>
+        <div style={S.headerTop}>
           <div style={S.headerTitleRow}>
             <h1 style={S.h1}>Circuit / Convention Inventory</h1>
             <SyncDot status={syncStatus} />

@@ -23,6 +23,7 @@ export function AdminHub({
   seedIfEmpty,
   syncStatus,
   onMarkReady,
+  onCancelOrder,
   volunteers,
   volunteersReady,
   reviewerId,
@@ -126,6 +127,7 @@ export function AdminHub({
           orders={orders}
           items={items}
           onMarkReady={onMarkReady}
+          onCancelOrder={onCancelOrder}
           volunteers={volunteers}
           reviewerId={reviewerId}
           currentVolunteerName={currentVolunteer.name}

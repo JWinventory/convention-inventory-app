@@ -18,15 +18,16 @@ import { SEED_ITEMS } from "./seedData";
 
 const ITEMS_COL = "items";
 const ORDERS_COL = "orders";
+const VOLUNTEERS_COL = "volunteers";
 const META_DOC = "meta/shared";
 
 export function useInventory() {
   const [items, setItems] = useState([]);
   const [orders, setOrders] = useState([]);
   const [notes, setNotes] = useState("");
-  const [volunteers, setVolunteersState] = useState([]);
-  const [reviewerName, setReviewerNameState] = useState("");
-  const [reviewerEmail, setReviewerEmailState] = useState("");
+  const [volunteers, setVolunteers] = useState([]);
+  const [volunteersReady, setVolunteersReady] = useState(false);
+  const [reviewerId, setReviewerId] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState("yellow"); // green | yellow | red
   const [ready, setReady] = useState(false);
@@ -67,8 +68,25 @@ export function useInventory() {
     return () => unsub();
   }, []);
 
-  // live shared settings: notes, the volunteer roster, and the one
-  // fixed reviewer (name + email for the review-needed notification).
+  // live volunteer roster — each volunteer's own record (name, phone,
+  // email, permissions, and their password hash+salt once they've set
+  // one). volunteersReady flips true after the first snapshot arrives,
+  // so the UI can tell "still loading" apart from "genuinely empty."
+  useEffect(() => {
+    if (!firebaseConfigured) return;
+    const q = query(collection(db, VOLUNTEERS_COL), orderBy("name"));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setVolunteers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setVolunteersReady(true);
+      },
+      () => setVolunteersReady(true)
+    );
+    return () => unsub();
+  }, []);
+
+  // live shared settings: notes, and which volunteer is the reviewer.
   useEffect(() => {
     if (!firebaseConfigured) return;
     const ref = doc(db, META_DOC);
@@ -78,9 +96,7 @@ export function useInventory() {
         if (snap.exists()) {
           const d = snap.data();
           setNotes(d.notes || "");
-          setVolunteersState(Array.isArray(d.volunteers) ? d.volunteers : []);
-          setReviewerNameState(d.reviewerName || "");
-          setReviewerEmailState(d.reviewerEmail || "");
+          setReviewerId(d.reviewerId || "");
         }
       },
       () => {}
@@ -239,27 +255,78 @@ export function useInventory() {
     }
   }, []);
 
-  // The volunteer roster staff pick assigned fillers (and the reviewer) from.
-  const saveVolunteers = useCallback(async (list) => {
+  // Creates a new volunteer record (no password yet — they set their
+  // own the first time they log in). Returns the new id.
+  const addVolunteer = useCallback(async ({ name, phone, email, permissions }) => {
     setSyncStatus("yellow");
     try {
-      await setDoc(doc(db, META_DOC), { volunteers: list, updatedAt: serverTimestamp() }, { merge: true });
+      const ref = await addDoc(collection(db, VOLUNTEERS_COL), {
+        name: name || "",
+        phone: phone || "",
+        email: email || "",
+        permissions: {
+          catalog: Boolean(permissions?.catalog),
+          orders: Boolean(permissions?.orders),
+          volunteers: Boolean(permissions?.volunteers),
+        },
+        passwordHash: null,
+        passwordSalt: null,
+        createdAtMs: Date.now(),
+      });
+      setSyncStatus("green");
+      return ref.id;
+    } catch (e) {
+      setSyncStatus("red");
+      return null;
+    }
+  }, []);
+
+  const updateVolunteer = useCallback(async (id, patch) => {
+    setSyncStatus("yellow");
+    try {
+      await updateDoc(doc(db, VOLUNTEERS_COL, id), patch);
       setSyncStatus("green");
     } catch (e) {
       setSyncStatus("red");
     }
   }, []);
 
-  // The one fixed person who reviews every order, plus where to email
-  // them when a new order needs review.
-  const saveReviewerSettings = useCallback(async (name, email) => {
+  const deleteVolunteer = useCallback(async (id) => {
     setSyncStatus("yellow");
     try {
-      await setDoc(
-        doc(db, META_DOC),
-        { reviewerName: name, reviewerEmail: email, updatedAt: serverTimestamp() },
-        { merge: true }
-      );
+      await deleteDoc(doc(db, VOLUNTEERS_COL, id));
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
+    }
+  }, []);
+
+  // Clears a volunteer's password so their next login prompts them to
+  // create a brand new one — this is what "admin resets a password" means.
+  const resetVolunteerPassword = useCallback(async (id) => {
+    setSyncStatus("yellow");
+    try {
+      await updateDoc(doc(db, VOLUNTEERS_COL, id), { passwordHash: null, passwordSalt: null });
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
+    }
+  }, []);
+
+  const setVolunteerPassword = useCallback(async (id, hash, salt) => {
+    setSyncStatus("yellow");
+    try {
+      await updateDoc(doc(db, VOLUNTEERS_COL, id), { passwordHash: hash, passwordSalt: salt });
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
+    }
+  }, []);
+
+  const saveReviewerId = useCallback(async (id) => {
+    setSyncStatus("yellow");
+    try {
+      await setDoc(doc(db, META_DOC), { reviewerId: id, updatedAt: serverTimestamp() }, { merge: true });
       setSyncStatus("green");
     } catch (e) {
       setSyncStatus("red");
@@ -271,8 +338,8 @@ export function useInventory() {
     orders,
     notes,
     volunteers,
-    reviewerName,
-    reviewerEmail,
+    volunteersReady,
+    reviewerId,
     loading,
     syncStatus,
     ready,
@@ -285,7 +352,11 @@ export function useInventory() {
     updateOrderStatus,
     updateOrder,
     saveNotes,
-    saveVolunteers,
-    saveReviewerSettings,
+    addVolunteer,
+    updateVolunteer,
+    deleteVolunteer,
+    resetVolunteerPassword,
+    setVolunteerPassword,
+    saveReviewerId,
   };
 }

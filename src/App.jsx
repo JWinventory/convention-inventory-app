@@ -64,8 +64,8 @@ export default function App() {
     orders,
     notes,
     volunteers,
-    reviewerName,
-    reviewerEmail,
+    volunteersReady,
+    reviewerId,
     syncStatus,
     seedIfEmpty,
     addItem,
@@ -76,8 +76,12 @@ export default function App() {
     updateOrderStatus,
     updateOrder,
     saveNotes,
-    saveVolunteers,
-    saveReviewerSettings,
+    addVolunteer,
+    updateVolunteer,
+    deleteVolunteer,
+    resetVolunteerPassword,
+    setVolunteerPassword,
+    saveReviewerId,
   } = useInventory();
 
   const [tab, setTab] = useState("inventory"); // inventory | admin
@@ -126,10 +130,7 @@ export default function App() {
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, activeCat, search, requester.eventType]);
-
-  const checkedOutItems = useMemo(
-    () => items.filter((it) => (it.out || 0) > 0),
+  }, [items, activeCat, search, requester.eventType]);    () => items.filter((it) => (it.out || 0) > 0),
     [items]
   );
 
@@ -175,12 +176,13 @@ export default function App() {
     if (id) {
       localStorage.setItem(MY_ORDER_KEY, id);
       setMyOrderId(id);
+      const reviewerVolunteer = volunteers.find((v) => v.id === reviewerId);
       try {
         await fetch("/api/notify-review", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            reviewerEmail,
+            reviewerEmail: reviewerVolunteer?.email || "",
             requester: { name: order.requester.name, phone: order.requester.phone },
             eventType: order.requester.eventType,
             eventDate: order.requester.eventDate,
@@ -258,7 +260,8 @@ export default function App() {
   return (
     <div style={S.page}>
       <header style={S.header}>
-        <div style={S.headerTop}>
+
+  const checkedOutItems = useMemo(        <div style={S.headerTop}>
           <div style={S.headerTitleRow}>
             <h1 style={S.h1}>Circuit / Convention Inventory</h1>
             <SyncDot status={syncStatus} />
@@ -287,10 +290,14 @@ export default function App() {
             syncStatus={syncStatus}
             onMarkReady={handleMarkOrderReady}
             volunteers={volunteers}
-            reviewerName={reviewerName}
-            reviewerEmail={reviewerEmail}
-            onSaveVolunteers={saveVolunteers}
-            onSaveReviewerSettings={saveReviewerSettings}
+            volunteersReady={volunteersReady}
+            reviewerId={reviewerId}
+            onAddVolunteer={addVolunteer}
+            onUpdateVolunteer={updateVolunteer}
+            onDeleteVolunteer={deleteVolunteer}
+            onResetVolunteerPassword={resetVolunteerPassword}
+            onSetVolunteerPassword={setVolunteerPassword}
+            onSaveReviewerId={saveReviewerId}
             onUpdateOrder={updateOrder}
           />
         ) : myOrderPhase !== "none" ? (

@@ -6,7 +6,7 @@ import { ImageCarousel } from "./ImageCarousel";
 import { getItemImages } from "../imageUtils";
 
 export function ItemCard({ item, onCheckOut, onShowQr, adminMode, onEdit, onDelete }) {
-  const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [lightbox, setLightbox] = useState(null); // { images, index } | null
   const out = item.out || 0;
   const available = item.total - out;
   const fullyOut = available <= 0;
@@ -26,7 +26,7 @@ export function ItemCard({ item, onCheckOut, onShowQr, adminMode, onEdit, onDele
         </button>
       )}
       <div style={S.itemImgWrap}>
-        <ImageCarousel images={images} alt={item.name} onEnlarge={setLightboxSrc} />
+        <ImageCarousel images={images} alt={item.name} onEnlarge={(imgs, idx) => setLightbox({ images: imgs, index: idx })} />
       </div>
       <div style={{ ...S.itemCat, color }}>{item.category}</div>
       <div style={S.itemName}>{item.name}</div>
@@ -70,7 +70,9 @@ export function ItemCard({ item, onCheckOut, onShowQr, adminMode, onEdit, onDele
         </div>
       )}
 
-      {lightboxSrc && <Lightbox src={lightboxSrc} alt={item.name} onClose={() => setLightboxSrc(null)} />}
+      {lightbox && (
+        <Lightbox images={lightbox.images} initialIndex={lightbox.index} alt={item.name} onClose={() => setLightbox(null)} />
+      )}
     </div>
   );
 }

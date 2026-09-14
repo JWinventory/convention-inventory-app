@@ -17,7 +17,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState("");
-  const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [lightbox, setLightbox] = useState(null); // { images, index } | null
 
   const categories = useMemo(() => {
     const set = new Set(items.map((i) => i.category).filter(Boolean));
@@ -158,7 +158,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
             item={item}
             onEdit={() => openEdit(item)}
             onDelete={() => handleDelete(item)}
-            onEnlarge={setLightboxSrc}
+            onEnlarge={(imgs, idx) => setLightbox({ images: imgs, index: idx })}
           />
         ))}
       </div>
@@ -220,7 +220,7 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
                   src={src}
                   alt={`Photo ${i + 1}`}
                   style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, cursor: "zoom-in" }}
-                  onClick={() => setLightboxSrc(src)}
+                  onClick={() => setLightbox({ images: form.images, index: i })}
                 />
                 <button
                   type="button"
@@ -258,7 +258,9 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
         </Modal>
       )}
 
-      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+      {lightbox && (
+        <Lightbox images={lightbox.images} initialIndex={lightbox.index} onClose={() => setLightbox(null)} />
+      )}
     </div>
   );
 }

@@ -6,9 +6,15 @@
 // particular photo would still come out too large — so most photos end
 // up noticeably sharper than before, and only very detailed/busy ones
 // get scaled back further.
-const MAX_DATA_URL_LENGTH = 700000; // ~700KB, leaves headroom under the 1MB doc cap
+//
+// maxDataUrlLength is overridable per-call: when several photos are
+// being added to the same item at once, the caller can pass a smaller
+// per-photo budget so the whole batch fits under Firestore's 1MB
+// per-document limit rather than each photo being compressed as if it
+// were the only one on that item.
+const DEFAULT_MAX_DATA_URL_LENGTH = 700000; // ~700KB, leaves headroom under the 1MB doc cap
 
-export function fileToCompressedDataUrl(file, maxDim = 900, quality = 0.85) {
+export function fileToCompressedDataUrl(file, maxDim = 900, quality = 0.85, maxDataUrlLength = DEFAULT_MAX_DATA_URL_LENGTH) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Could not read file"));
@@ -17,7 +23,7 @@ export function fileToCompressedDataUrl(file, maxDim = 900, quality = 0.85) {
       img.onerror = () => reject(new Error("Could not load image"));
       img.onload = () => {
         try {
-          resolve(compressWithFallback(img, maxDim, quality));
+          resolve(compressWithFallback(img, maxDim, quality, maxDataUrlLength));
         } catch (err) {
           reject(err);
         }
@@ -44,15 +50,15 @@ function drawToCanvas(img, dim) {
 // Tries the requested quality/size first. If the result is still too
 // large, lowers quality in steps, and if it's still too large even at
 // the lowest quality, shrinks the dimensions and tries again.
-function compressWithFallback(img, maxDim, quality) {
-  const dimSteps = [maxDim, Math.round(maxDim * 0.75), Math.round(maxDim * 0.5)];
-  const qualitySteps = [quality, 0.7, 0.55, 0.4];
+function compressWithFallback(img, maxDim, quality, maxDataUrlLength) {
+  const dimSteps = [maxDim, Math.round(maxDim * 0.75), Math.round(maxDim * 0.5), Math.round(maxDim * 0.3)];
+  const qualitySteps = [quality, 0.7, 0.55, 0.4, 0.25];
 
   for (const dim of dimSteps) {
     const canvas = drawToCanvas(img, dim);
     for (const q of qualitySteps) {
       const dataUrl = canvas.toDataURL("image/jpeg", q);
-      if (dataUrl.length <= MAX_DATA_URL_LENGTH) {
+      if (dataUrl.length <= maxDataUrlLength) {
         return dataUrl;
       }
     }
@@ -60,6 +66,20 @@ function compressWithFallback(img, maxDim, quality) {
 
   const canvas = drawToCanvas(img, dimSteps[dimSteps.length - 1]);
   return canvas.toDataURL("image/jpeg", qualitySteps[qualitySteps.length - 1]);
+}
+
+// Given how many images already exist on an item and how many new ones
+// are about to be added, works out a safe per-image size budget so the
+// whole set fits comfortably under Firestore's 1MB document cap —
+// instead of compressing every photo as if it were the only one.
+const TOTAL_IMAGE_BUDGET = 900000; // leaves room for the item's other fields
+const MIN_PER_IMAGE_BUDGET = 60000; // don't compress any single photo below this
+
+export function budgetPerNewImage(existingImages, newFileCount) {
+  const existingBytes = (existingImages || []).reduce((sum, img) => sum + (img ? img.length : 0), 0);
+  const remaining = TOTAL_IMAGE_BUDGET - existingBytes;
+  const perImage = remaining / Math.max(newFileCount, 1);
+  return Math.max(perImage, MIN_PER_IMAGE_BUDGET);
 }
 
 // Returns an item's photos as an array, regardless of whether it was

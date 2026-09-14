@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { S, colorFor } from "../styles";
+import { S, colorFor, CAT_COLORS } from "../styles";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
 import { Lightbox } from "./Lightbox";
@@ -10,8 +10,9 @@ const EVENT_OPTIONS = ["Circuit Assembly", "Regional Convention", "Memorial"];
 
 const BLANK_FORM = { name: "", category: "", total: "1", note: "", images: [], events: [], perUnitQr: false };
 
-export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty, syncStatus }) {
+export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty, syncStatus, headerHeight }) {
   const [search, setSearch] = useState("");
+  const [activeCat, setActiveCat] = useState("All");
   const [editing, setEditing] = useState(null); // null | "new" | item
   const [form, setForm] = useState(BLANK_FORM);
   const [saving, setSaving] = useState(false);
@@ -24,13 +25,26 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
     return Array.from(set).sort();
   }, [items]);
 
+  // Same ordering as the Inventory page's category tabs: known
+  // categories in their defined order first, then any extra ones
+  // sorted alphabetically, with "All" always first.
+  const catTabsList = useMemo(() => {
+    const known = Object.keys(CAT_COLORS);
+    const present = Array.from(new Set(items.map((i) => i.category)));
+    const ordered = known.filter((c) => present.includes(c));
+    const extra = present.filter((c) => !known.includes(c)).sort();
+    return ["All", ...ordered, ...extra];
+  }, [items]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const base = q
-      ? items.filter((i) => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q))
-      : items;
+    const base = items.filter((i) => {
+      if (activeCat !== "All" && i.category !== activeCat) return false;
+      if (q && !i.name.toLowerCase().includes(q) && !i.category.toLowerCase().includes(q)) return false;
+      return true;
+    });
     return [...base].sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, search]);
+  }, [items, search, activeCat]);
 
   function openNew() {
     setForm(BLANK_FORM);
@@ -125,16 +139,34 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
 
   return (
     <div>
-      <div style={S.adminBar}>
-        <div style={S.toolbar}>
-          <div style={S.searchWrap}>
-            <Icon.search />
-            <input style={S.searchInput} placeholder="Search catalog…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div style={{ position: "sticky", top: headerHeight || 0, zIndex: 40, background: "#f4f5f7", paddingTop: 6 }}>
+        <div style={S.adminBar}>
+          <div style={S.toolbar}>
+            <div style={S.searchWrap}>
+              <Icon.search />
+              <input style={S.searchInput} placeholder="Search catalog…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
           </div>
+          <button style={S.addItemBtn} onClick={openNew}>
+            <Icon.plus /> Add Item
+          </button>
         </div>
-        <button style={S.addItemBtn} onClick={openNew}>
-          <Icon.plus /> Add Item
-        </button>
+
+        <div style={S.catTabs}>
+          {catTabsList.map((c) => (
+            <button
+              key={c}
+              onClick={() => setActiveCat(c)}
+              style={{
+                ...S.catTab,
+                ...(activeCat === c ? S.catTabActive : {}),
+                ...(c !== "All" ? { borderBottom: `3px solid ${CAT_COLORS[c] || "#999"}` } : {}),
+              }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
 
       {items.length === 0 && (

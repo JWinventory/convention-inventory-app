@@ -3,7 +3,8 @@ import { S } from "../styles";
 
 // Displays one photo from a list, with prev/next arrows and an
 // "X of Y" counter when there's more than one. Tapping the photo
-// calls onEnlarge with the currently-shown image.
+// calls onEnlarge with the full image list and the current index, so
+// the enlarged view can also flip through the rest.
 export function ImageCarousel({ images, alt, onEnlarge }) {
   const [index, setIndex] = useState(0);
 
@@ -29,7 +30,7 @@ export function ImageCarousel({ images, alt, onEnlarge }) {
         src={current}
         alt={alt}
         style={{ ...S.itemImg, cursor: "zoom-in" }}
-        onClick={() => onEnlarge && onEnlarge(current)}
+        onClick={() => onEnlarge && onEnlarge(images, safeIndex)}
       />
       {images.length > 1 && (
         <>

@@ -4,7 +4,7 @@ import { Icon } from "./Icon";
 import { Modal } from "./Modal";
 import { Lightbox } from "./Lightbox";
 import { ImageCarousel } from "./ImageCarousel";
-import { fileToCompressedDataUrl, getItemImages } from "../imageUtils";
+import { fileToCompressedDataUrl, getItemImages, budgetPerNewImage } from "../imageUtils";
 
 const EVENT_OPTIONS = ["Circuit Assembly", "Regional Convention", "Memorial"];
 
@@ -57,7 +57,12 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     try {
-      const dataUrls = await Promise.all(files.map((f) => fileToCompressedDataUrl(f)));
+      // Split the available per-item space across however many photos are
+      // being added right now, so a big batch (e.g. 10 photos at once)
+      // still fits under Firestore's 1MB document cap instead of each one
+      // being compressed as if it were the only photo on this item.
+      const perImageBudget = budgetPerNewImage(form.images, files.length);
+      const dataUrls = await Promise.all(files.map((f) => fileToCompressedDataUrl(f, 900, 0.85, perImageBudget)));
       setForm((f) => ({ ...f, images: [...f.images, ...dataUrls] }));
     } catch (err) {
       alert("Couldn't read one of those images. Try different files.");

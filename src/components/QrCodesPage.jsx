@@ -21,18 +21,24 @@ function printAll() {
   window.print();
 }
 
-// Prints just one specific code, wherever it is.
-function printOneCode(key) {
+// Prints one or more specific codes/stickers by their key, hiding
+// everything else that would otherwise show on the page.
+function printCodes(keys) {
   clearPrintMarks();
-  const card = document.querySelector(`.qr-print-card[data-key="${key}"]`);
-  if (!card) return;
-  card.classList.add("qr-print-only");
+  const found = keys.map((k) => document.querySelector(`.qr-print-card[data-key="${k}"]`)).filter(Boolean);
+  if (found.length === 0) return;
+  found.forEach((el) => el.classList.add("qr-print-only"));
   const cleanup = () => {
     clearPrintMarks();
     window.removeEventListener("afterprint", cleanup);
   };
   window.addEventListener("afterprint", cleanup);
   window.print();
+}
+
+// Prints just one specific code, wherever it is.
+function printOneCode(key) {
+  printCodes([key]);
 }
 
 // Prints every code belonging to one or more items — used for both
@@ -99,6 +105,11 @@ export function QrCodesPage({ items, updateItem }) {
   const [customLabel, setCustomLabel] = useState("");
   const [generated, setGenerated] = useState(null); // { text, label } | null
 
+  const [stickerText, setStickerText] = useState("Lubbock CEPC");
+  const [stickerShape, setStickerShape] = useState("circle"); // circle | square
+  const [stickerCount, setStickerCount] = useState("1");
+  const [stickers, setStickers] = useState([]); // [{ key, text, shape }]
+
   function handleGenerate(e) {
     e.preventDefault();
     if (!customText.trim()) return;
@@ -109,6 +120,20 @@ export function QrCodesPage({ items, updateItem }) {
     setGenerated(null);
     setCustomText("");
     setCustomLabel("");
+  }
+
+  function handleGenerateStickers(e) {
+    e.preventDefault();
+    const text = stickerText.trim();
+    if (!text) return;
+    const n = Math.max(parseInt(stickerCount, 10) || 1, 1);
+    setStickers(
+      Array.from({ length: n }, (_, i) => ({ key: `sticker-${Date.now()}-${i}`, text, shape: stickerShape }))
+    );
+  }
+
+  function handleClearStickers() {
+    setStickers([]);
   }
 
   return (
@@ -154,6 +179,83 @@ export function QrCodesPage({ items, updateItem }) {
                 Print This Code
               </button>
               <button style={S.secondaryBtn} onClick={handleClearGenerated}>
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={S.card}>
+        <h2 style={S.cardTitle}>Custom Text Sticker</h2>
+        <p style={S.tinyMuted}>
+          Bold, eye-catching stickers — no QR code — handy for branding equipment cases, boxes, or
+          trailers. Each prints at about 2 inches.
+        </p>
+        <form onSubmit={handleGenerateStickers}>
+          <label style={S.fieldLabel}>
+            Sticker Text
+            <input
+              style={S.fieldInput}
+              value={stickerText}
+              onChange={(e) => setStickerText(e.target.value)}
+              placeholder="Lubbock CEPC"
+            />
+          </label>
+          <label style={S.fieldLabel}>Shape</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <button
+              type="button"
+              style={{ ...S.catTab, flex: 1, ...(stickerShape === "circle" ? S.catTabActive : {}) }}
+              onClick={() => setStickerShape("circle")}
+            >
+              Circle
+            </button>
+            <button
+              type="button"
+              style={{ ...S.catTab, flex: 1, ...(stickerShape === "square" ? S.catTabActive : {}) }}
+              onClick={() => setStickerShape("square")}
+            >
+              Square
+            </button>
+          </div>
+          <label style={S.fieldLabel}>
+            How many stickers?
+            <input
+              style={S.fieldInput}
+              type="number"
+              min="1"
+              value={stickerCount}
+              onChange={(e) => setStickerCount(e.target.value)}
+            />
+          </label>
+          <button style={S.primaryBtn} type="submit" disabled={!stickerText.trim()}>
+            Generate Stickers
+          </button>
+        </form>
+
+        {stickers.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div className="qr-print-grid" style={qrGridStyle}>
+              {stickers.map((s) => (
+                <div
+                  key={s.key}
+                  className="qr-print-card sticker-print-card"
+                  data-key={s.key}
+                  style={s.shape === "circle" ? stickerCircleStyle : stickerSquareStyle}
+                >
+                  <div style={stickerTextStyle}>{s.text}</div>
+                  <button className="no-print" style={printOneStickerBtnStyle} onClick={() => printCodes([s.key])}>
+                    Print This Sticker
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button style={S.addItemBtn} onClick={() => printCodes(stickers.map((s) => s.key))}>
+                Print All Stickers
+              </button>
+              <button style={S.secondaryBtn} onClick={handleClearStickers}>
                 Clear
               </button>
             </div>
@@ -291,6 +393,13 @@ export function QrCodesPage({ items, updateItem }) {
           .qr-page-root { position: absolute; left: 0; top: 0; width: 100%; }
           .accordion-body { display: block !important; }
           .qr-print-card { page-break-inside: avoid; box-shadow: none !important; }
+          .sticker-print-card {
+            width: 2in !important;
+            height: 2in !important;
+            max-width: none !important;
+            aspect-ratio: auto !important;
+            margin: 0 auto;
+          }
           .no-print { display: none !important; }
           .qr-page-root:has(.qr-print-card.qr-print-only) .qr-print-card:not(.qr-print-only) {
             display: none;
@@ -387,6 +496,46 @@ const printOneBtnStyle = {
   borderRadius: 6,
   padding: "6px 0",
   fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const stickerBaseStyle = {
+  background: BRAND_BLUE,
+  boxShadow: "0 6px 16px rgba(0,114,206,0.4)",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 10,
+  padding: "26px 16px",
+  aspectRatio: "1",
+  width: "100%",
+  maxWidth: 220,
+  margin: "0 auto",
+};
+
+const stickerCircleStyle = { ...stickerBaseStyle, borderRadius: "50%" };
+const stickerSquareStyle = { ...stickerBaseStyle, borderRadius: 12 };
+
+const stickerTextStyle = {
+  fontSize: 22,
+  fontWeight: 900,
+  color: "#fff",
+  lineHeight: 1.25,
+  textAlign: "center",
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  wordBreak: "break-word",
+};
+
+const printOneStickerBtnStyle = {
+  background: "rgba(255,255,255,0.9)",
+  color: NAVY,
+  border: "none",
+  borderRadius: 6,
+  padding: "5px 10px",
+  fontSize: 10,
   fontWeight: 700,
   cursor: "pointer",
 };

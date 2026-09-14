@@ -11,6 +11,7 @@ import { MyOrderStatus } from "./components/MyOrderStatus";
 import { FindOrderForm } from "./components/FindOrderForm";
 import { SelectedItemsList } from "./components/SelectedItemsList";
 import { AdminHub } from "./components/AdminHub";
+import { PullToRefresh } from "./components/PullToRefresh";
 import { useInventory } from "./useInventory";
 import { firebaseConfigured } from "./firebase";
 
@@ -288,6 +289,7 @@ export default function App() {
   }
 
   return (
+    <PullToRefresh>
     <div style={S.page}>
       <header style={S.header}>
         <div style={S.headerTop}>
@@ -408,6 +410,7 @@ export default function App() {
         />
       )}
     </div>
+    </PullToRefresh>
   );
 }
 

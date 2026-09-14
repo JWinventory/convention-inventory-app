@@ -17,6 +17,7 @@ const SESSION_KEY = "volunteerSessionId";
 export function AdminHub({
   items,
   orders,
+  headerHeight,
   addItem,
   updateItem,
   deleteItem,
@@ -120,6 +121,7 @@ export function AdminHub({
           deleteItem={deleteItem}
           seedIfEmpty={seedIfEmpty}
           syncStatus={syncStatus}
+          headerHeight={headerHeight}
         />
       )}
       {activeSection === "orders" && (

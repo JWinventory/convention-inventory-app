@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { S, CAT_COLORS } from "./styles";
 import { Icon } from "./components/Icon";
 import { RequesterForm } from "./components/RequesterForm";
@@ -96,6 +96,21 @@ export default function App() {
   const [submitNotes, setSubmitNotes] = useState("");
   const [noteDraft, setNoteDraft] = useState(notes);
   const [noteFlash, setNoteFlash] = useState(false);
+
+  // Measures the sticky header's actual rendered height, so the search
+  // bar / category tabs below it can stick at exactly that offset
+  // instead of a guessed pixel value that could drift out of sync.
+  const headerRef = useRef(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const measure = () => setHeaderHeight(el.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const [myOrderId, setMyOrderId] = useState(() => localStorage.getItem(MY_ORDER_KEY) || null);
 
@@ -291,7 +306,7 @@ export default function App() {
   return (
     <PullToRefresh>
     <div style={S.page}>
-      <header style={S.header}>
+      <header ref={headerRef} style={S.header}>
         <div style={S.headerTop}>
           <div style={S.headerTitleRow}>
             <h1 style={S.h1}>Circuit / Convention Inventory</h1>
@@ -314,6 +329,7 @@ export default function App() {
           <AdminHub
             items={items}
             orders={orders}
+            headerHeight={headerHeight}
             addItem={addItem}
             updateItem={updateItem}
             deleteItem={deleteItem}
@@ -343,26 +359,28 @@ export default function App() {
             <FindOrderForm onFind={handleFindOrder} />
             <RequesterForm requester={requester} setRequester={setRequester} />
             <SelectedItemsList items={checkedOutItems} onRemove={handleRemoveFromOrder} />
-            <div style={S.toolbar}>
-              <div style={S.searchWrap}>
-                <Icon.search />
-                <input style={S.searchInput} placeholder="Search items…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <div style={{ position: "sticky", top: headerHeight, zIndex: 40, background: "#f4f5f7", paddingTop: 6 }}>
+              <div style={S.toolbar}>
+                <div style={S.searchWrap}>
+                  <Icon.search />
+                  <input style={S.searchInput} placeholder="Search items…" value={search} onChange={(e) => setSearch(e.target.value)} />
+                </div>
               </div>
-            </div>
-            <div style={S.catTabs}>
-              {categories.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setActiveCat(c)}
-                  style={{
-                    ...S.catTab,
-                    ...(activeCat === c ? S.catTabActive : {}),
-                    ...(c !== "All" ? { borderBottom: `3px solid ${CAT_COLORS[c] || "#999"}` } : {}),
-                  }}
-                >
-                  {c}
-                </button>
-              ))}
+              <div style={S.catTabs}>
+                {categories.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setActiveCat(c)}
+                    style={{
+                      ...S.catTab,
+                      ...(activeCat === c ? S.catTabActive : {}),
+                      ...(c !== "All" ? { borderBottom: `3px solid ${CAT_COLORS[c] || "#999"}` } : {}),
+                    }}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
             </div>
             <div style={S.grid}>
               {filteredItems.map((item) => (

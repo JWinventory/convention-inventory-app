@@ -1,443 +1,366 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { S, CAT_COLORS } from "./styles";
-import { Icon } from "./components/Icon";
-import { RequesterForm } from "./components/RequesterForm";
-import { ItemCard } from "./components/ItemCard";
-import { NotesSection } from "./components/NotesSection";
-import { CheckInScanModal } from "./components/CheckInScanModal";
-import { QrModal } from "./components/QrModal";
-import { SubmitModal } from "./components/SubmitModal";
-import { MyOrderStatus } from "./components/MyOrderStatus";
-import { FindOrderForm } from "./components/FindOrderForm";
-import { SelectedItemsList } from "./components/SelectedItemsList";
-import { AdminHub } from "./components/AdminHub";
-import { PullToRefresh } from "./components/PullToRefresh";
-import { useInventory } from "./useInventory";
-import { firebaseConfigured } from "./firebase";
+import React, { useEffect, useState } from "react";
+import { S } from "../styles";
+import { AdminPage } from "./AdminPage";
+import { OrdersPage } from "./OrdersPage";
+import { OrderHistoryPage } from "./OrderHistoryPage";
+import { QrCodesPage } from "./QrCodesPage";
+import { EmergencyChecklistPage } from "./EmergencyChecklistPage";
+import { VolunteersPage } from "./VolunteersPage";
 
-const REQUESTER_KEY = "convention-inventory-requester";
-const MY_ORDER_KEY = "convention-inventory-my-order-id";
+const SESSION_KEY = "volunteerSessionId";
 
-function loadRequester() {
-  try {
-    const raw = localStorage.getItem(REQUESTER_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    /* ignore */
-  }
-  return { name: "", phone: "", eventType: "", eventDate: "", pickupDate: "", returnDate: "" };
-}
+// Replaces the old single shared password with real per-volunteer
+// logins. The very first volunteer ever created becomes a full admin
+// automatically (so there's never a moment with zero admins), and any
+// volunteer without a password yet is walked through creating one the
+// first time they try to log in.
+export function AdminHub({
+  items,
+  orders,
+  headerHeight,
+  addItem,
+  updateItem,
+  deleteItem,
+  seedIfEmpty,
+  syncStatus,
+  onMarkReady,
+  onCancelOrder,
+  volunteers,
+  volunteersReady,
+  reviewerId,
+  onAddVolunteer,
+  onUpdateVolunteer,
+  onDeleteVolunteer,
+  onResetVolunteerPassword,
+  onSetVolunteerPassword,
+  onSaveReviewerId,
+  onUpdateOrder,
+}) {
+  const [sessionId, setSessionId] = useState(() => sessionStorage.getItem(SESSION_KEY) || null);
+  const [section, setSection] = useState(null);
 
-// Matches each order line item up against the live catalog to see how
-// much of it is still checked out right now.
-function computeLineItems(order, items) {
-  return (order.items || []).map((li) => {
-    const liveItem = items.find((i) => i.name === li.name);
-    const stillOut = liveItem ? Math.min(li.qty, liveItem.out || 0) : 0;
-    return { ...li, stillOut, exists: Boolean(liveItem) };
-  });
-}
+  const currentVolunteer = volunteers.find((v) => v.id === sessionId) || null;
 
-// Finds the most recent still-active order whose phone or email
-// matches the query, so a requester can pick up their order on a
-// different device than the one they submitted from. Orders are
-// already sorted newest-first by the live query in useInventory.
-function findMyOrder(orders, items, query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return null;
-  const qDigits = q.replace(/\D/g, "");
-
-  const matches = orders.filter((o) => {
-    const phoneDigits = (o.requesterPhone || "").replace(/\D/g, "");
-    const email = (o.requesterEmail || "").toLowerCase();
-    const phoneMatch = qDigits.length >= 7 && phoneDigits === qDigits;
-    const emailMatch = q.includes("@") && email === q;
-    return phoneMatch || emailMatch;
-  });
-
-  const active = matches.filter((o) => computeLineItems(o, items).some((li) => li.stillOut > 0));
-  return active[0] || null;
-}
-
-export default function App() {
-  const {
-    items,
-    orders,
-    notes,
-    volunteers,
-    volunteersReady,
-    reviewerId,
-    syncStatus,
-    seedIfEmpty,
-    addItem,
-    updateItem,
-    deleteItem,
-    applyCheckChange,
-    addOrder,
-    updateOrderStatus,
-    updateOrder,
-    saveNotes,
-    addVolunteer,
-    updateVolunteer,
-    deleteVolunteer,
-    resetVolunteerPassword,
-    setVolunteerPassword,
-    saveReviewerId,
-  } = useInventory();
-
-  const [tab, setTab] = useState("inventory"); // inventory | admin
-  const [requester, setRequester] = useState(loadRequester);
-  const [search, setSearch] = useState("");
-  const [activeCat, setActiveCat] = useState("All");
-  const [checkInScanOpen, setCheckInScanOpen] = useState(false);
-  const [qrItem, setQrItem] = useState(null);
-  const [submitOpen, setSubmitOpen] = useState(false);
-  const [submitEmail, setSubmitEmail] = useState("");
-  const [submitNotes, setSubmitNotes] = useState("");
-  const [noteDraft, setNoteDraft] = useState(notes);
-  const [noteFlash, setNoteFlash] = useState(false);
-
-  // Measures the sticky header's actual rendered height, so the search
-  // bar / category tabs below it can stick at exactly that offset
-  // instead of a guessed pixel value that could drift out of sync.
-  const headerRef = useRef(null);
-  const [headerHeight, setHeaderHeight] = useState(0);
+  // If the logged-in volunteer was deleted (or the session is stale),
+  // drop back to the login screen automatically.
   useEffect(() => {
-    const el = headerRef.current;
-    if (!el) return;
-    const measure = () => setHeaderHeight(el.offsetHeight);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const [myOrderId, setMyOrderId] = useState(() => localStorage.getItem(MY_ORDER_KEY) || null);
-
-  useEffect(() => setNoteDraft(notes), [notes]);
-
-  // Requester info is always editable — just keep it saved locally as it
-  // changes, so it's remembered next time without needing an explicit
-  // "Save" step that would otherwise lock the fields.
-  useEffect(() => {
-    localStorage.setItem(REQUESTER_KEY, JSON.stringify(requester));
-  }, [requester]);
-
-  const categories = useMemo(() => {
-    const known = Object.keys(CAT_COLORS);
-    const present = Array.from(new Set(items.map((i) => i.category)));
-    const ordered = known.filter((c) => present.includes(c));
-    const extra = present.filter((c) => !known.includes(c)).sort();
-    return ["All", ...ordered, ...extra];
-  }, [items]);
-
-  const filteredItems = useMemo(() => {
-    return items
-      .filter((it) => {
-        if (activeCat !== "All" && it.category !== activeCat) return false;
-        if (requester.eventType) {
-          const evs = Array.isArray(it.events) ? it.events : [];
-          if (evs.length > 0 && !evs.includes(requester.eventType)) return false;
-        }
-        if (search.trim()) {
-          const q = search.trim().toLowerCase();
-          if (!it.name.toLowerCase().includes(q) && !it.category.toLowerCase().includes(q)) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, activeCat, search, requester.eventType]);
-
-  const checkedOutItems = useMemo(
-    () => items.filter((it) => (it.out || 0) > 0),
-    [items]
-  );
-
-  function saveNote() {
-    saveNotes(noteDraft);
-    setNoteFlash(true);
-    setTimeout(() => setNoteFlash(false), 2000);
-  }
-
-  // Fully checks an item back in, taking it off the pending order —
-  // used by the "Remove" button in the Your Order So Far list.
-  function handleRemoveFromOrder(item) {
-    applyCheckChange(item.id, -(item.out || 0), requester.name);
-  }
-
-  // --- Phase 1-3 order tracking (this browser's own submitted order) ---
-  const myOrder = useMemo(() => orders.find((o) => o.id === myOrderId) || null, [orders, myOrderId]);
-  const myLineItems = useMemo(() => (myOrder ? computeLineItems(myOrder, items) : []), [myOrder, items]);
-  const myOrderPhase = useMemo(() => {
-    if (!myOrder) return "none";
-    const allDone = myLineItems.length > 0 && myLineItems.every((li) => li.stillOut === 0);
-    if (allDone) return "none";
-    return myOrder.status === "fulfilled" ? "ready" : "submitted";
-  }, [myOrder, myLineItems]);
-
-  // Once every item on "my" order is checked back in, stop tracking it
-  // so the screen unlocks and is ready for a new request.
-  useEffect(() => {
-    if (myOrder && myOrderPhase === "none") {
-      localStorage.removeItem(MY_ORDER_KEY);
-      setMyOrderId(null);
+    if (volunteersReady && sessionId && !currentVolunteer) {
+      sessionStorage.removeItem(SESSION_KEY);
+      setSessionId(null);
     }
-  }, [myOrder, myOrderPhase]);
+  }, [volunteersReady, sessionId, currentVolunteer]);
 
-  // If the order finishes while the check-in scanner happens to still be
-  // open for some reason, make sure it closes too.
-  useEffect(() => {
-    if (myOrderPhase !== "ready") setCheckInScanOpen(false);
-  }, [myOrderPhase]);
-
-  async function handleOrderCreated(order) {
-    const id = await addOrder(order);
-    if (id) {
-      localStorage.setItem(MY_ORDER_KEY, id);
-      setMyOrderId(id);
-      const reviewerVolunteer = volunteers.find((v) => v.id === reviewerId);
-      try {
-        await fetch("/api/notify-review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            reviewerEmail: reviewerVolunteer?.email || "",
-            requester: { name: order.requester.name, phone: order.requester.phone },
-            eventType: order.requester.eventType,
-            eventDate: order.requester.eventDate,
-            items: order.items,
-          }),
-        });
-      } catch (err) {
-        // Order is already saved even if the review-alert email fails to send.
-      }
-    }
+  function handleLoggedIn(volunteerId) {
+    sessionStorage.setItem(SESSION_KEY, volunteerId);
+    setSessionId(volunteerId);
+    setSection(null);
   }
 
-  // Cross-device lookup: a requester who submitted on another device
-  // can find their in-progress order here by phone or email, and pick
-  // it up on this one too.
-  function handleFindOrder(query) {
-    const found = findMyOrder(orders, items, query);
-    if (!found) return false;
-
-    localStorage.setItem(MY_ORDER_KEY, found.id);
-    setMyOrderId(found.id);
-
-    setRequester({
-      name: found.requesterName || "",
-      phone: found.requesterPhone || "",
-      eventType: found.eventType || "",
-      eventDate: found.eventDate || "",
-      pickupDate: found.pickupDate || "",
-      returnDate: found.returnDate || "",
-    });
-
-    return true;
+  function handleLogout() {
+    sessionStorage.removeItem(SESSION_KEY);
+    setSessionId(null);
   }
 
-  // Staff-side: flips the order to "fulfilled" and emails the requester
-  // (silently skipped server-side if they didn't leave an email).
-  async function handleMarkOrderReady(order) {
-    await updateOrderStatus(order.id, "fulfilled");
-    try {
-      await fetch("/api/notify-ready", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requesterEmail: order.requesterEmail,
-          requester: { name: order.requesterName, phone: order.requesterPhone },
-          items: order.items,
-        }),
-      });
-    } catch (err) {
-      // Status is already updated even if the email fails to send.
-    }
-  }
-
-  // Force-closes an order at any stage — even if nothing's actually
-  // been filled or returned. Any of its items still checked out get
-  // returned to available first (so catalog counts stay correct),
-  // then the order is marked cancelled, which moves it to History
-  // since it's no longer "active."
-  async function handleCancelOrder(order) {
-    const requesterLabel = order.requesterName || "this requester";
-    if (
-      !window.confirm(
-        `Cancel and archive this order for ${requesterLabel}? Any items still checked out will be returned to available.`
-      )
-    ) {
-      return;
-    }
-    for (const li of order.items || []) {
-      const liveItem = items.find((i) => i.name === li.name);
-      if (liveItem) {
-        const stillOut = Math.min(li.qty, liveItem.out || 0);
-        if (stillOut > 0) {
-          // eslint-disable-next-line no-await-in-loop
-          await applyCheckChange(liveItem.id, -stillOut, "Order cancelled", "Order cancelled/archived by staff");
-        }
-      }
-    }
-    await updateOrder(order.id, { status: "cancelled" });
-  }
-
-  if (!firebaseConfigured) {
+  if (!volunteersReady) {
     return (
-      <div style={S.page}>
-        <header style={S.header}>
-          <div style={S.headerTop}>
-            <div style={S.headerTitleRow}>
-              <h1 style={S.h1}>Circuit / Convention Inventory</h1>
-            </div>
-          </div>
-        </header>
-        <div style={S.configWarning}>
-          <strong>Firebase isn't configured yet.</strong>
-          <br />
-          Copy <code style={S.code}>.env.example</code> to <code style={S.code}>.env</code> and fill in your Firebase
-          project's web app config (Firebase Console → Project settings → General → Your apps). See the README for
-          step-by-step setup, then restart the dev server.
-        </div>
+      <div style={S.card}>
+        <p style={S.tinyMuted}>Loading…</p>
       </div>
     );
   }
 
-  return (
-    <PullToRefresh>
-    <div style={S.page}>
-      <header ref={headerRef} style={S.header}>
-        <div style={S.headerTop}>
-          <div style={S.headerTitleRow}>
-            <h1 style={S.h1}>Circuit / Convention Inventory</h1>
-            <SyncDot status={syncStatus} />
-          </div>
-          <div style={S.h2}>Equipment check-in / check-out tracker</div>
-          <div style={S.navTabs}>
-            <button style={{ ...S.navTab, ...(tab === "inventory" ? S.navTabActive : {}) }} onClick={() => setTab("inventory")}>
-              Inventory
-            </button>
-            <button style={{ ...S.navTab, ...(tab === "admin" ? S.navTabActive : {}) }} onClick={() => setTab("admin")}>
-              Admin
-            </button>
-          </div>
-        </div>
-      </header>
+  if (!currentVolunteer) {
+    if (volunteers.length === 0) {
+      return <FirstTimeSetup onAddVolunteer={onAddVolunteer} onSetVolunteerPassword={onSetVolunteerPassword} onLoggedIn={handleLoggedIn} />;
+    }
+    return (
+      <LoginForm
+        volunteers={volunteers}
+        onSetVolunteerPassword={onSetVolunteerPassword}
+        onLoggedIn={handleLoggedIn}
+      />
+    );
+  }
 
-      <main style={S.main}>
-        {tab === "admin" ? (
-          <AdminHub
-            items={items}
-            orders={orders}
-            headerHeight={headerHeight}
-            addItem={addItem}
-            updateItem={updateItem}
-            deleteItem={deleteItem}
-            seedIfEmpty={seedIfEmpty}
-            syncStatus={syncStatus}
-            onMarkReady={handleMarkOrderReady}
-            onCancelOrder={handleCancelOrder}
-            volunteers={volunteers}
-            volunteersReady={volunteersReady}
-            reviewerId={reviewerId}
-            onAddVolunteer={addVolunteer}
-            onUpdateVolunteer={updateVolunteer}
-            onDeleteVolunteer={deleteVolunteer}
-            onResetVolunteerPassword={resetVolunteerPassword}
-            onSetVolunteerPassword={setVolunteerPassword}
-            onSaveReviewerId={saveReviewerId}
-            onUpdateOrder={updateOrder}
-          />
-        ) : myOrderPhase !== "none" ? (
-          <MyOrderStatus
-            lineItems={myLineItems}
-            phase={myOrderPhase}
-            onScanCheckIn={() => setCheckInScanOpen(true)}
-          />
-        ) : (
+  const SECTIONS = [];
+  if (currentVolunteer.permissions?.catalog) SECTIONS.push({ key: "catalog", label: "Catalog" });
+  if (currentVolunteer.permissions?.orders) SECTIONS.push({ key: "orders", label: "Orders" });
+  SECTIONS.push({ key: "history", label: "History" });
+  SECTIONS.push({ key: "qrcodes", label: "QR Codes" });
+  SECTIONS.push({ key: "emergency", label: "Emergency" });
+  if (currentVolunteer.permissions?.volunteers) SECTIONS.push({ key: "volunteers", label: "Volunteers" });
+
+  const activeSection = SECTIONS.some((s) => s.key === section) ? section : SECTIONS[0]?.key;
+
+  return (
+    <div>
+      <div style={loggedInBarStyle}>
+        <span>Logged in as {currentVolunteer.name}</span>
+        <button style={S.editBtn} onClick={handleLogout}>
+          Log Out
+        </button>
+      </div>
+
+      <div style={S.catTabs}>
+        {SECTIONS.map((s) => (
+          <button
+            key={s.key}
+            onClick={() => setSection(s.key)}
+            style={{ ...S.catTab, ...(activeSection === s.key ? S.catTabActive : {}) }}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {activeSection === "catalog" && (
+        <AdminPage
+          items={items}
+          addItem={addItem}
+          updateItem={updateItem}
+          deleteItem={deleteItem}
+          seedIfEmpty={seedIfEmpty}
+          syncStatus={syncStatus}
+          headerHeight={headerHeight}
+        />
+      )}
+      {activeSection === "orders" && (
+        <OrdersPage
+          orders={orders}
+          items={items}
+          onMarkReady={onMarkReady}
+          onCancelOrder={onCancelOrder}
+          volunteers={volunteers}
+          reviewerId={reviewerId}
+          currentVolunteerName={currentVolunteer.name}
+          onUpdateOrder={onUpdateOrder}
+        />
+      )}
+      {activeSection === "history" && <OrderHistoryPage orders={orders} items={items} />}
+      {activeSection === "qrcodes" && <QrCodesPage items={items} updateItem={updateItem} />}
+      {activeSection === "emergency" && <EmergencyChecklistPage items={items} />}
+      {activeSection === "volunteers" && (
+        <VolunteersPage
+          volunteers={volunteers}
+          reviewerId={reviewerId}
+          onAddVolunteer={onAddVolunteer}
+          onUpdateVolunteer={onUpdateVolunteer}
+          onDeleteVolunteer={onDeleteVolunteer}
+          onResetVolunteerPassword={onResetVolunteerPassword}
+          onSaveReviewerId={onSaveReviewerId}
+        />
+      )}
+    </div>
+  );
+}
+
+// Shown only when the volunteer roster is completely empty — the very
+// first person to open Admin sets themselves up as the initial admin
+// with every permission, so the app is never in a locked-out state.
+function FirstTimeSetup({ onAddVolunteer, onSetVolunteerPassword, onLoggedIn }) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const complete = name.trim() && password.length >= 4 && password === confirm;
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!complete) return;
+    setBusy(true);
+    setError("");
+    try {
+      const hashRes = await fetch("/api/hash-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const hashData = await hashRes.json();
+      if (!hashRes.ok) {
+        setError(hashData.error || "Couldn't set up your password.");
+        setBusy(false);
+        return;
+      }
+      const id = await onAddVolunteer({
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        permissions: { catalog: true, orders: true, volunteers: true },
+      });
+      if (!id) {
+        setError("Couldn't create your account — check your connection and try again.");
+        setBusy(false);
+        return;
+      }
+      await onSetVolunteerPassword(id, hashData.hash, hashData.salt);
+      onLoggedIn(id);
+    } catch (err) {
+      setError("Something went wrong setting up your account.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={S.card}>
+      <h2 style={S.cardTitle}>Welcome — Set Up the First Admin Account</h2>
+      <p style={S.tinyMuted}>
+        No volunteers have been added yet. Set yourself up here first — you'll get full access to manage
+        the catalog, orders, and other volunteers.
+      </p>
+      <form onSubmit={handleSubmit}>
+        <label style={S.fieldLabel}>
+          Your Name
+          <input style={S.fieldInput} value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label style={S.fieldLabel}>
+          Phone
+          <input style={S.fieldInput} value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </label>
+        <label style={S.fieldLabel}>
+          Email
+          <input style={S.fieldInput} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </label>
+        <label style={S.fieldLabel}>
+          Choose a Password
+          <input style={S.fieldInput} type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        <label style={S.fieldLabel}>
+          Confirm Password
+          <input style={S.fieldInput} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        </label>
+        {error && <div style={S.errorText}>{error}</div>}
+        <button style={S.primaryBtn} type="submit" disabled={!complete || busy}>
+          {busy ? "Setting Up…" : "Create Admin Account & Log In"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function LoginForm({ volunteers, onSetVolunteerPassword, onLoggedIn }) {
+  const [selectedId, setSelectedId] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const selected = volunteers.find((v) => v.id === selectedId) || null;
+  const needsNewPassword = selected && !selected.passwordHash;
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    if (!selected) return;
+    setError("");
+    setBusy(true);
+
+    if (needsNewPassword) {
+      if (password.length < 4 || password !== confirm) {
+        setError("Passwords must match and be at least 4 characters.");
+        setBusy(false);
+        return;
+      }
+      try {
+        const hashRes = await fetch("/api/hash-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+        const hashData = await hashRes.json();
+        if (!hashRes.ok) {
+          setError(hashData.error || "Couldn't set up your password.");
+          setBusy(false);
+          return;
+        }
+        await onSetVolunteerPassword(selected.id, hashData.hash, hashData.salt);
+        onLoggedIn(selected.id);
+      } catch (err) {
+        setError("Something went wrong setting up your password.");
+        setBusy(false);
+      }
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password, hash: selected.passwordHash, salt: selected.passwordSalt }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        onLoggedIn(selected.id);
+      } else {
+        setError("Incorrect password.");
+        setBusy(false);
+      }
+    } catch (err) {
+      setError("Couldn't verify password — check your connection.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={S.card}>
+      <h2 style={S.cardTitle}>Admin Log In</h2>
+      <form onSubmit={handleLogin}>
+        <label style={S.fieldLabel}>
+          Your Name
+          <select
+            style={S.fieldInput}
+            value={selectedId}
+            onChange={(e) => {
+              setSelectedId(e.target.value);
+              setPassword("");
+              setConfirm("");
+              setError("");
+            }}
+          >
+            <option value="">Select…</option>
+            {volunteers.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {selected && needsNewPassword && (
+          <p style={S.tinyMuted}>You haven't set a password yet — create one now to log in.</p>
+        )}
+
+        {selected && (
           <>
-            <FindOrderForm onFind={handleFindOrder} />
-            <RequesterForm requester={requester} setRequester={setRequester} />
-            <SelectedItemsList items={checkedOutItems} onRemove={handleRemoveFromOrder} />
-            <div style={{ position: "sticky", top: headerHeight, zIndex: 40, background: "#f4f5f7", paddingTop: 6 }}>
-              <div style={S.toolbar}>
-                <div style={S.searchWrap}>
-                  <Icon.search />
-                  <input style={S.searchInput} placeholder="Search items…" value={search} onChange={(e) => setSearch(e.target.value)} />
-                </div>
-              </div>
-              <div style={S.catTabs}>
-                {categories.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setActiveCat(c)}
-                    style={{
-                      ...S.catTab,
-                      ...(activeCat === c ? S.catTabActive : {}),
-                      ...(c !== "All" ? { borderBottom: `3px solid ${CAT_COLORS[c] || "#999"}` } : {}),
-                    }}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div style={S.grid}>
-              {filteredItems.map((item) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  onCheckOut={(qty) => applyCheckChange(item.id, qty, requester.name)}
-                  onShowQr={() => setQrItem(item)}
-                />
-              ))}
-              {filteredItems.length === 0 && <div style={S.emptyState}>No items match your search.</div>}
-            </div>
-            <NotesSection noteDraft={noteDraft} setNoteDraft={setNoteDraft} onSave={saveNote} flash={noteFlash} />
+            <label style={S.fieldLabel}>
+              {needsNewPassword ? "Create a Password" : "Password"}
+              <input style={S.fieldInput} type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            {needsNewPassword && (
+              <label style={S.fieldLabel}>
+                Confirm Password
+                <input style={S.fieldInput} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+              </label>
+            )}
           </>
         )}
-      </main>
 
-      {tab === "inventory" && myOrderPhase === "none" && (
-        <button style={S.fabSubmit} onClick={() => setSubmitOpen(true)}>
-          <Icon.bell />
-          <span>Submit &amp; Notify</span>
-          {checkedOutItems.length > 0 && <span style={S.fabBadge}>{checkedOutItems.length}</span>}
+        {error && <div style={S.errorText}>{error}</div>}
+        <button style={S.primaryBtn} type="submit" disabled={!selected || busy}>
+          {busy ? "Please wait…" : needsNewPassword ? "Create Password & Log In" : "Log In"}
         </button>
-      )}
-
-      {checkInScanOpen && myOrder && (
-        <CheckInScanModal
-          lineItems={myLineItems}
-          items={items}
-          onResolveAction={(id, delta, note) => applyCheckChange(id, delta, requester.name, note)}
-          onClose={() => setCheckInScanOpen(false)}
-        />
-      )}
-      {qrItem && <QrModal item={qrItem} onClose={() => setQrItem(null)} />}
-      {submitOpen && (
-        <SubmitModal
-          requester={requester}
-          checkedOutItems={checkedOutItems}
-          email={submitEmail}
-          setEmail={setSubmitEmail}
-          notes={submitNotes}
-          setNotes={setSubmitNotes}
-          onOrderCreated={handleOrderCreated}
-          onClose={() => setSubmitOpen(false)}
-        />
-      )}
-    </div>
-    </PullToRefresh>
-  );
-}
-
-function SyncDot({ status }) {
-  const color = status === "green" ? "#2ecc71" : status === "yellow" ? "#f1c40f" : "#e74c3c";
-  const label = status === "green" ? "Synced" : status === "yellow" ? "Syncing…" : "Sync error";
-  return (
-    <div style={S.syncWrap} title={label}>
-      <span style={{ ...S.syncDot, background: color }} />
+      </form>
     </div>
   );
 }
+
+const loggedInBarStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  fontSize: 12,
+  color: "#888",
+  marginBottom: 10,
+};

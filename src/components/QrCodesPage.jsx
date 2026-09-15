@@ -236,24 +236,51 @@ export function QrCodesPage({ items, updateItem }) {
 
         {stickers.length > 0 && (
           <div style={{ marginTop: 16 }}>
-            <div className="qr-print-grid" style={qrGridStyle}>
-              {stickers.map((s) => (
-                <div
-                  key={s.key}
-                  className="qr-print-card sticker-print-card"
-                  data-key={s.key}
-                  style={s.shape === "circle" ? stickerCircleStyle : stickerSquareStyle}
+            <p style={S.tinyMuted}>
+              {stickers.length === 1
+                ? "1 sticker ready to print."
+                : `${stickers.length} identical stickers ready to print — showing one preview below.`}
+            </p>
+
+            {/* Only the first sticker is shown on screen — the rest exist
+                purely so "Print All Stickers" produces the full batch. */}
+            <div className="qr-print-grid" style={{ ...qrGridStyle, maxWidth: 220, margin: "0 auto" }}>
+              <div
+                className="qr-print-card sticker-print-card"
+                data-key={stickers[0].key}
+                style={stickers[0].shape === "circle" ? stickerCircleStyle : stickerSquareStyle}
+              >
+                <div style={stickerTextStyle}>{stickers[0].text}</div>
+                <button
+                  className="no-print"
+                  style={printOneStickerBtnStyle}
+                  onClick={() => printCodes([stickers[0].key])}
                 >
-                  <div style={stickerTextStyle}>{s.text}</div>
-                  <button className="no-print" style={printOneStickerBtnStyle} onClick={() => printCodes([s.key])}>
-                    Print This Sticker
-                  </button>
-                </div>
-              ))}
+                  Print This Sticker
+                </button>
+              </div>
             </div>
+
+            {stickers.length > 1 && (
+              <div className="screen-hide-print-show">
+                <div className="qr-print-grid" style={qrGridStyle}>
+                  {stickers.slice(1).map((s) => (
+                    <div
+                      key={s.key}
+                      className="qr-print-card sticker-print-card"
+                      data-key={s.key}
+                      style={s.shape === "circle" ? stickerCircleStyle : stickerSquareStyle}
+                    >
+                      <div style={stickerTextStyle}>{s.text}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button style={S.addItemBtn} onClick={() => printCodes(stickers.map((s) => s.key))}>
-                Print All Stickers
+                Print All Stickers ({stickers.length})
               </button>
               <button style={S.secondaryBtn} onClick={handleClearStickers}>
                 Clear
@@ -387,11 +414,13 @@ export function QrCodesPage({ items, updateItem }) {
       )}
 
       <style>{`
+        .screen-hide-print-show { display: none; }
         @media print {
           body * { visibility: hidden; }
           .qr-page-root, .qr-page-root * { visibility: visible; }
           .qr-page-root { position: absolute; left: 0; top: 0; width: 100%; }
           .accordion-body { display: block !important; }
+          .screen-hide-print-show { display: block; }
           .qr-print-card { page-break-inside: avoid; box-shadow: none !important; }
           .sticker-print-card {
             width: 2in !important;

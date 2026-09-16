@@ -18,12 +18,14 @@ import { SEED_ITEMS } from "./seedData";
 
 const ITEMS_COL = "items";
 const ORDERS_COL = "orders";
+const DRAFTS_COL = "drafts";
 const VOLUNTEERS_COL = "volunteers";
 const META_DOC = "meta/shared";
 
 export function useInventory() {
   const [items, setItems] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [drafts, setDrafts] = useState([]);
   const [notes, setNotes] = useState("");
   const [volunteers, setVolunteers] = useState([]);
   const [volunteersReady, setVolunteersReady] = useState(false);
@@ -62,6 +64,23 @@ export function useInventory() {
       q,
       (snap) => {
         setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, []);
+
+  // live drafts — lightweight "in-progress order" records, written when
+  // someone taps Save, so a different device can look the same
+  // in-progress order up by phone/email and join in as a collaborator
+  // (picking their own unclaimed items) before anything is submitted.
+  useEffect(() => {
+    if (!firebaseConfigured) return;
+    const q = query(collection(db, DRAFTS_COL), orderBy("updatedAtMs", "desc"));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setDrafts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       },
       () => {}
     );
@@ -221,6 +240,49 @@ export function useInventory() {
     }
   }, []);
 
+  // Upserts a lightweight "in-progress order" record so a different
+  // device can find it (by phone/email) and join in before anything is
+  // submitted. Pass an existing draftId to update it in place; pass
+  // null/undefined to create a new one and get back its id.
+  const saveDraft = useCallback(async (draftId, requester, email, notes) => {
+    setSyncStatus("yellow");
+    try {
+      const payload = {
+        requesterName: requester.name || "",
+        requesterPhone: requester.phone || "",
+        requesterEmail: email || "",
+        eventType: requester.eventType || "",
+        eventDate: requester.eventDate || "",
+        pickupDate: requester.pickupDate || "",
+        returnDate: requester.returnDate || "",
+        notes: notes || "",
+        updatedAtMs: Date.now(),
+      };
+      if (draftId) {
+        await setDoc(doc(db, DRAFTS_COL, draftId), payload, { merge: true });
+        setSyncStatus("green");
+        return draftId;
+      }
+      const ref = await addDoc(collection(db, DRAFTS_COL), { ...payload, createdAtMs: Date.now() });
+      setSyncStatus("green");
+      return ref.id;
+    } catch (e) {
+      setSyncStatus("red");
+      return null;
+    }
+  }, []);
+
+  // Removes the draft once it's been submitted for real (or abandoned),
+  // so it stops showing up as an "in-progress order" to look up.
+  const deleteDraft = useCallback(async (draftId) => {
+    if (!draftId) return;
+    try {
+      await deleteDoc(doc(db, DRAFTS_COL, draftId));
+    } catch (e) {
+      // non-critical — a leftover draft doc is harmless
+    }
+  }, []);
+
   // Flips an order's status (e.g. "assigned" -> "fulfilled" when
   // staff have gathered the items and are ready to notify the requester).
   const updateOrderStatus = useCallback(async (orderId, status) => {
@@ -336,6 +398,7 @@ export function useInventory() {
   return {
     items,
     orders,
+    drafts,
     notes,
     volunteers,
     volunteersReady,
@@ -349,6 +412,8 @@ export function useInventory() {
     deleteItem,
     applyCheckChange,
     addOrder,
+    saveDraft,
+    deleteDraft,
     updateOrderStatus,
     updateOrder,
     saveNotes,

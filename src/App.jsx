@@ -6,7 +6,8 @@ import { ItemCard } from "./components/ItemCard";
 import { NotesSection } from "./components/NotesSection";
 import { CheckInScanModal } from "./components/CheckInScanModal";
 import { QrModal } from "./components/QrModal";
-import { SubmitModal } from "./components/SubmitModal";
+import { OrderReviewPage } from "./components/OrderReviewPage";
+import { CollaboratorBanner } from "./components/CollaboratorBanner";
 import { MyOrderStatus } from "./components/MyOrderStatus";
 import { FindOrderForm } from "./components/FindOrderForm";
 import { SelectedItemsList } from "./components/SelectedItemsList";
@@ -17,6 +18,7 @@ import { firebaseConfigured } from "./firebase";
 
 const REQUESTER_KEY = "convention-inventory-requester";
 const MY_ORDER_KEY = "convention-inventory-my-order-id";
+const MY_DRAFT_KEY = "convention-inventory-my-draft-id";
 
 function loadRequester() {
   try {
@@ -59,10 +61,30 @@ function findMyOrder(orders, items, query) {
   return active[0] || null;
 }
 
+// Finds the most recently-saved draft (in-progress, not yet submitted
+// order) whose phone or email matches the query. Drafts arrive already
+// sorted newest-first by the live query in useInventory.
+function findMyDraft(drafts, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  const qDigits = q.replace(/\D/g, "");
+
+  const matches = drafts.filter((d) => {
+    const phoneDigits = (d.requesterPhone || "").replace(/\D/g, "");
+    const email = (d.requesterEmail || "").toLowerCase();
+    const phoneMatch = qDigits.length >= 7 && phoneDigits === qDigits;
+    const emailMatch = q.includes("@") && email === q;
+    return phoneMatch || emailMatch;
+  });
+
+  return matches[0] || null;
+}
+
 export default function App() {
   const {
     items,
     orders,
+    drafts,
     notes,
     volunteers,
     volunteersReady,
@@ -74,6 +96,8 @@ export default function App() {
     deleteItem,
     applyCheckChange,
     addOrder,
+    saveDraft,
+    deleteDraft,
     updateOrderStatus,
     updateOrder,
     saveNotes,
@@ -91,7 +115,11 @@ export default function App() {
   const [activeCat, setActiveCat] = useState("All");
   const [checkInScanOpen, setCheckInScanOpen] = useState(false);
   const [qrItem, setQrItem] = useState(null);
-  const [submitOpen, setSubmitOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [myDraftId, setMyDraftId] = useState(() => localStorage.getItem(MY_DRAFT_KEY) || null);
+  const [collaboratorDraft, setCollaboratorDraft] = useState(null); // draft object, when picking items for someone else's order
+  const [collaboratorName, setCollaboratorName] = useState("");
+  const [lockedItemIds, setLockedItemIds] = useState(null); // Set of item ids already claimed at the moment a collaborator joined
   const [submitEmail, setSubmitEmail] = useState("");
   const [submitNotes, setSubmitNotes] = useState("");
   const [noteDraft, setNoteDraft] = useState(notes);
@@ -181,6 +209,7 @@ export default function App() {
     if (myOrder && myOrderPhase === "none") {
       localStorage.removeItem(MY_ORDER_KEY);
       setMyOrderId(null);
+      setReviewOpen(false);
     }
   }, [myOrder, myOrderPhase]);
 
@@ -195,6 +224,11 @@ export default function App() {
     if (id) {
       localStorage.setItem(MY_ORDER_KEY, id);
       setMyOrderId(id);
+      if (myDraftId) {
+        deleteDraft(myDraftId);
+        localStorage.removeItem(MY_DRAFT_KEY);
+        setMyDraftId(null);
+      }
       const reviewerVolunteer = volunteers.find((v) => v.id === reviewerId);
       try {
         await fetch("/api/notify-review", {
@@ -219,21 +253,37 @@ export default function App() {
   // it up on this one too.
   function handleFindOrder(query) {
     const found = findMyOrder(orders, items, query);
-    if (!found) return false;
+    if (found) {
+      localStorage.setItem(MY_ORDER_KEY, found.id);
+      setMyOrderId(found.id);
 
-    localStorage.setItem(MY_ORDER_KEY, found.id);
-    setMyOrderId(found.id);
+      setRequester({
+        name: found.requesterName || "",
+        phone: found.requesterPhone || "",
+        eventType: found.eventType || "",
+        eventDate: found.eventDate || "",
+        pickupDate: found.pickupDate || "",
+        returnDate: found.returnDate || "",
+      });
 
-    setRequester({
-      name: found.requesterName || "",
-      phone: found.requesterPhone || "",
-      eventType: found.eventType || "",
-      eventDate: found.eventDate || "",
-      pickupDate: found.pickupDate || "",
-      returnDate: found.returnDate || "",
-    });
+      return true;
+    }
 
-    return true;
+    const foundDraft = findMyDraft(drafts, query);
+    if (foundDraft) {
+      if (foundDraft.id === myDraftId) {
+        // This device's own in-progress draft — just resume the normal review flow.
+        setReviewOpen(true);
+        return true;
+      }
+      // Someone else's in-progress draft — join in as a collaborator: everything
+      // already claimed right now gets locked, anything else is fair game.
+      setCollaboratorDraft(foundDraft);
+      setLockedItemIds(new Set(items.filter((it) => (it.out || 0) > 0).map((it) => it.id)));
+      return true;
+    }
+
+    return false;
   }
 
   // Staff-side: flips the order to "fulfilled" and emails the requester
@@ -354,11 +404,36 @@ export default function App() {
             phase={myOrderPhase}
             onScanCheckIn={() => setCheckInScanOpen(true)}
           />
+        ) : reviewOpen ? (
+          <OrderReviewPage
+            requester={requester}
+            checkedOutItems={checkedOutItems}
+            email={submitEmail}
+            setEmail={setSubmitEmail}
+            notes={submitNotes}
+            setNotes={setSubmitNotes}
+            onOrderCreated={handleOrderCreated}
+            onBack={() => setReviewOpen(false)}
+          />
         ) : (
           <>
-            <FindOrderForm onFind={handleFindOrder} />
-            <RequesterForm requester={requester} setRequester={setRequester} />
-            <SelectedItemsList items={checkedOutItems} onRemove={handleRemoveFromOrder} />
+            {collaboratorDraft ? (
+              <CollaboratorBanner
+                draft={collaboratorDraft}
+                collaboratorName={collaboratorName}
+                setCollaboratorName={setCollaboratorName}
+                onDone={() => {
+                  setCollaboratorDraft(null);
+                  setLockedItemIds(null);
+                }}
+              />
+            ) : (
+              <>
+                <FindOrderForm onFind={handleFindOrder} />
+                <RequesterForm requester={requester} setRequester={setRequester} />
+              </>
+            )}
+            <SelectedItemsList items={checkedOutItems} onRemove={handleRemoveFromOrder} lockedIds={lockedItemIds} />
             <div style={{ position: "sticky", top: headerHeight, zIndex: 40, background: "#f4f5f7", paddingTop: 6 }}>
               <div style={S.toolbar}>
                 <div style={S.searchWrap}>
@@ -387,21 +462,36 @@ export default function App() {
                 <ItemCard
                   key={item.id}
                   item={item}
-                  onCheckOut={(qty) => applyCheckChange(item.id, qty, requester.name)}
+                  locked={Boolean(lockedItemIds && lockedItemIds.has(item.id))}
+                  onCheckOut={(qty) =>
+                    applyCheckChange(item.id, qty, collaboratorDraft ? collaboratorName : requester.name)
+                  }
                   onShowQr={() => setQrItem(item)}
                 />
               ))}
               {filteredItems.length === 0 && <div style={S.emptyState}>No items match your search.</div>}
             </div>
-            <NotesSection noteDraft={noteDraft} setNoteDraft={setNoteDraft} onSave={saveNote} flash={noteFlash} />
+            {!collaboratorDraft && (
+              <NotesSection noteDraft={noteDraft} setNoteDraft={setNoteDraft} onSave={saveNote} flash={noteFlash} />
+            )}
           </>
         )}
       </main>
 
-      {tab === "inventory" && myOrderPhase === "none" && (
-        <button style={S.fabSubmit} onClick={() => setSubmitOpen(true)}>
+      {tab === "inventory" && myOrderPhase === "none" && !reviewOpen && !collaboratorDraft && (
+        <button
+          style={S.fabSubmit}
+          onClick={async () => {
+            const id = await saveDraft(myDraftId, requester, submitEmail, submitNotes);
+            if (id && !myDraftId) {
+              localStorage.setItem(MY_DRAFT_KEY, id);
+              setMyDraftId(id);
+            }
+            setReviewOpen(true);
+          }}
+        >
           <Icon.bell />
-          <span>Submit &amp; Notify</span>
+          <span>Save</span>
           {checkedOutItems.length > 0 && <span style={S.fabBadge}>{checkedOutItems.length}</span>}
         </button>
       )}
@@ -415,18 +505,6 @@ export default function App() {
         />
       )}
       {qrItem && <QrModal item={qrItem} onClose={() => setQrItem(null)} />}
-      {submitOpen && (
-        <SubmitModal
-          requester={requester}
-          checkedOutItems={checkedOutItems}
-          email={submitEmail}
-          setEmail={setSubmitEmail}
-          notes={submitNotes}
-          setNotes={setSubmitNotes}
-          onOrderCreated={handleOrderCreated}
-          onClose={() => setSubmitOpen(false)}
-        />
-      )}
     </div>
     </PullToRefresh>
   );

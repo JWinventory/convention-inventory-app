@@ -332,6 +332,28 @@ export default function App() {
     await updateOrder(order.id, { status: "cancelled" });
   }
 
+  // Cancels an in-progress (not-yet-submitted) draft. Since items aren't
+  // tied to a specific draft until it's actually submitted, this releases
+  // everything currently checked out — the honest limitation being that if
+  // more than one draft is somehow in progress at once, this clears both.
+  async function handleCancelDraft(draft) {
+    const requesterLabel = draft.requesterName || "this requester";
+    if (
+      !window.confirm(
+        `Cancel this in-progress order for ${requesterLabel}? Everything checked out so far will be returned to available.`
+      )
+    ) {
+      return;
+    }
+    for (const it of items) {
+      if ((it.out || 0) > 0) {
+        // eslint-disable-next-line no-await-in-loop
+        await applyCheckChange(it.id, -(it.out || 0), "Draft cancelled", "In-progress order cancelled by staff");
+      }
+    }
+    await deleteDraft(draft.id);
+  }
+
   if (!firebaseConfigured) {
     return (
       <div style={S.page}>
@@ -379,6 +401,7 @@ export default function App() {
           <AdminHub
             items={items}
             orders={orders}
+            drafts={drafts}
             headerHeight={headerHeight}
             addItem={addItem}
             updateItem={updateItem}
@@ -387,6 +410,7 @@ export default function App() {
             syncStatus={syncStatus}
             onMarkReady={handleMarkOrderReady}
             onCancelOrder={handleCancelOrder}
+            onCancelDraft={handleCancelDraft}
             volunteers={volunteers}
             volunteersReady={volunteersReady}
             reviewerId={reviewerId}

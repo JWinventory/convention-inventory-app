@@ -3,13 +3,30 @@ import { S } from "../styles";
 
 // currentVolunteerName is who's actually logged in right now — used to
 // make sure only the designated Reviewer can click "Mark as Reviewed"
-// for themselves, not just anyone with Orders access.
-export function OrdersPage({ orders, items, onMarkReady, onCancelOrder, volunteers, reviewerId, currentVolunteerName, onUpdateOrder }) {
+// for themselves, not just anyone with Orders access. Cancelling an
+// order (submitted or still in-progress) is restricted the same way:
+// only the designated Reviewer, or a full admin (volunteer-management
+// access), can do it.
+export function OrdersPage({
+  orders,
+  drafts,
+  items,
+  onMarkReady,
+  onCancelOrder,
+  onCancelDraft,
+  volunteers,
+  reviewerId,
+  currentVolunteerName,
+  isCurrentVolunteerAdmin,
+  onUpdateOrder,
+}) {
   const [search, setSearch] = useState("");
 
   const reviewer = volunteers.find((v) => v.id === reviewerId) || null;
   const reviewerName = reviewer?.name || "";
   const volunteerNames = volunteers.map((v) => v.name);
+  const isReviewer = Boolean(reviewerName) && currentVolunteerName === reviewerName;
+  const canCancel = isReviewer || Boolean(isCurrentVolunteerAdmin);
 
   // For each order, look up the *current* out-count for every item it listed
   // (matched by name). An order stays here while it's still active (anything
@@ -87,16 +104,30 @@ export function OrdersPage({ orders, items, onMarkReady, onCancelOrder, voluntee
           volunteerNames={volunteerNames}
           reviewerName={reviewerName}
           currentVolunteerName={currentVolunteerName}
+          canCancel={canCancel}
           onMarkReady={onMarkReady}
           onCancelOrder={onCancelOrder}
           onUpdateOrder={onUpdateOrder}
         />
       ))}
+
+      {drafts && drafts.length > 0 && (
+        <>
+          <h3 style={{ ...S.cardTitle, marginTop: 18 }}>In-Progress, Not Yet Submitted ({drafts.length})</h3>
+          <div style={{ ...S.tinyMuted, marginBottom: 10 }}>
+            Items aren't tied to a specific draft until it's submitted, so cancelling one releases everything
+            currently checked out that hasn't been submitted yet.
+          </div>
+          {drafts.map((draft) => (
+            <DraftCard key={draft.id} draft={draft} canCancel={canCancel} onCancel={onCancelDraft} />
+          ))}
+        </>
+      )}
     </div>
   );
 }
 
-function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, onMarkReady, onCancelOrder, onUpdateOrder }) {
+function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, canCancel, onMarkReady, onCancelOrder, onUpdateOrder }) {
   const [sending, setSending] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [pickedFillers, setPickedFillers] = useState(order.assignedFillers || []);
@@ -242,9 +273,56 @@ function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, 
       )}
 
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", textAlign: "right" }}>
-        <button style={cancelLinkStyle} disabled={cancelling} onClick={handleCancel}>
-          {cancelling ? "Cancelling…" : "Cancel & Archive Order"}
-        </button>
+        {canCancel ? (
+          <button style={cancelLinkStyle} disabled={cancelling} onClick={handleCancel}>
+            {cancelling ? "Cancelling…" : "Cancel & Archive Order"}
+          </button>
+        ) : (
+          <span style={{ ...S.tinyMuted, fontSize: 11 }}>Only the reviewer or an admin can cancel this order.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DraftCard({ draft, canCancel, onCancel }) {
+  const [cancelling, setCancelling] = useState(false);
+
+  async function handleCancel() {
+    setCancelling(true);
+    try {
+      await onCancel(draft);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  return (
+    <div style={S.card}>
+      <div style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e" }}>
+        {draft.requesterName || "Unnamed requester"}
+      </div>
+      <div style={S.tinyMuted}>
+        {draft.requesterPhone || "—"}
+        {draft.requesterEmail ? ` · ${draft.requesterEmail}` : ""}
+      </div>
+      <div style={S.tinyMuted}>
+        {draft.eventType || "—"} · Event {draft.eventDate || "—"} · Pickup {draft.pickupDate || "—"} · Return{" "}
+        {draft.returnDate || "—"}
+      </div>
+      {draft.notes && (
+        <div style={{ ...S.tinyMuted, marginTop: 8 }}>
+          <strong>Notes:</strong> {draft.notes}
+        </div>
+      )}
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", textAlign: "right" }}>
+        {canCancel ? (
+          <button style={cancelLinkStyle} disabled={cancelling} onClick={handleCancel}>
+            {cancelling ? "Cancelling…" : "Cancel This Draft"}
+          </button>
+        ) : (
+          <span style={{ ...S.tinyMuted, fontSize: 11 }}>Only the reviewer or an admin can cancel this.</span>
+        )}
       </div>
     </div>
   );

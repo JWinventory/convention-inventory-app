@@ -17,6 +17,7 @@ const SESSION_KEY = "volunteerSessionId";
 export function AdminHub({
   items,
   orders,
+  drafts,
   headerHeight,
   addItem,
   updateItem,
@@ -25,6 +26,7 @@ export function AdminHub({
   syncStatus,
   onMarkReady,
   onCancelOrder,
+  onCancelDraft,
   volunteers,
   volunteersReady,
   reviewerId,
@@ -127,12 +129,15 @@ export function AdminHub({
       {activeSection === "orders" && (
         <OrdersPage
           orders={orders}
+          drafts={drafts}
           items={items}
           onMarkReady={onMarkReady}
           onCancelOrder={onCancelOrder}
+          onCancelDraft={onCancelDraft}
           volunteers={volunteers}
           reviewerId={reviewerId}
           currentVolunteerName={currentVolunteer.name}
+          isCurrentVolunteerAdmin={Boolean(currentVolunteer.permissions?.volunteers)}
           onUpdateOrder={onUpdateOrder}
         />
       )}

@@ -1,26 +1,37 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { S } from "../styles";
 
-// A plain, paper-friendly checklist of every catalog item, for use
-// if the app or internet is unavailable during an emergency.
+// A plain, paper-friendly checklist of every catalog item, grouped by
+// department (category) with a line separating each group — for
+// printing out, in case the app or internet is unavailable.
 export function EmergencyChecklistPage({ items }) {
-  const sorted = [...items].sort(
-    (a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
-  );
+  const groups = useMemo(() => {
+    const sorted = [...items].sort(
+      (a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
+    );
+    const byDept = new Map();
+    for (const item of sorted) {
+      const dept = item.category || "Uncategorized";
+      if (!byDept.has(dept)) byDept.set(dept, []);
+      byDept.get(dept).push(item);
+    }
+    return Array.from(byDept.entries()).map(([department, deptItems]) => ({ department, items: deptItems }));
+  }, [items]);
 
   return (
     <div>
       <div style={S.adminBar}>
-        <h2 style={S.cardTitle}>Emergency Checklist</h2>
+        <h2 style={S.cardTitle}>Print Forms</h2>
         <button style={S.addItemBtn} onClick={() => window.print()}>
           Print Checklist
         </button>
       </div>
       <p style={S.tinyMuted}>
-        A paper-friendly list of every catalog item with a checkbox, in case the app or internet is unavailable.
+        A paper-friendly list of every catalog item with a checkbox, grouped by department, in case the app
+        or internet is unavailable.
       </p>
 
-      {sorted.length === 0 ? (
+      {groups.length === 0 ? (
         <div style={S.card}>
           <p style={S.tinyMuted}>No items in the catalog yet.</p>
         </div>
@@ -30,18 +41,25 @@ export function EmergencyChecklistPage({ items }) {
             <tr>
               <th style={thStyle}>✓</th>
               <th style={thStyle}>Item</th>
-              <th style={thStyle}>Category</th>
               <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((item) => (
-              <tr key={item.id}>
-                <td style={{ ...tdStyle, width: 30, fontSize: 16 }}>☐</td>
-                <td style={tdStyle}>{item.name}</td>
-                <td style={tdStyle}>{item.category}</td>
-                <td style={{ ...tdStyle, textAlign: "center" }}>{item.total}</td>
-              </tr>
+            {groups.map((group, groupIdx) => (
+              <React.Fragment key={group.department}>
+                <tr>
+                  <td colSpan={3} style={{ ...deptRowStyle, ...(groupIdx > 0 ? deptSeparatorStyle : {}) }}>
+                    {group.department}
+                  </td>
+                </tr>
+                {group.items.map((item) => (
+                  <tr key={item.id}>
+                    <td style={{ ...tdStyle, width: 30, fontSize: 16 }}>☐</td>
+                    <td style={tdStyle}>{item.name}</td>
+                    <td style={{ ...tdStyle, textAlign: "center" }}>{item.total}</td>
+                  </tr>
+                ))}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -92,4 +110,18 @@ const tdStyle = {
   padding: "8px 10px",
   borderBottom: "1px solid #eee",
   color: "#1a1a2e",
+};
+
+const deptRowStyle = {
+  fontSize: 12,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: 0.4,
+  color: "#555",
+  background: "#f4f5f7",
+  padding: "8px 10px",
+};
+
+const deptSeparatorStyle = {
+  borderTop: "3px solid #999",
 };

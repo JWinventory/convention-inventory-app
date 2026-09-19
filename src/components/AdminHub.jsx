@@ -89,7 +89,7 @@ export function AdminHub({
   if (currentVolunteer.permissions?.orders) SECTIONS.push({ key: "orders", label: "Orders" });
   SECTIONS.push({ key: "history", label: "History" });
   SECTIONS.push({ key: "qrcodes", label: "QR Codes" });
-  SECTIONS.push({ key: "emergency", label: "Emergency" });
+  SECTIONS.push({ key: "emergency", label: "Print Lists" });
   if (currentVolunteer.permissions?.volunteers) SECTIONS.push({ key: "volunteers", label: "Volunteers" });
 
   const activeSection = SECTIONS.some((s) => s.key === section) ? section : SECTIONS[0]?.key;

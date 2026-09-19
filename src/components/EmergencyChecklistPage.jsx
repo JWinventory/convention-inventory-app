@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { flushSync } from "react-dom";
 import { S } from "../styles";
 
 // Print Lists: two things live here.
@@ -23,11 +24,16 @@ export function EmergencyChecklistPage({ items, orders }) {
   }, []);
 
   function printOnly(targetKey) {
-    setPrintTarget(targetKey);
-    requestAnimationFrame(() => {
-      document.body.classList.add("printing-scoped");
-      window.print();
+    // flushSync forces React to finish applying the print-scoping class to
+    // the DOM before we call print — without it, requestAnimationFrame (or
+    // any async approach) can race React's render, so the print dialog
+    // sometimes opens before the right section is actually visible, which
+    // is what makes the button feel unresponsive or need a second tap.
+    flushSync(() => {
+      setPrintTarget(targetKey);
     });
+    document.body.classList.add("printing-scoped");
+    window.print();
   }
 
   const readyOrders = useMemo(() => (orders || []).filter((o) => o.status === "fulfilled"), [orders]);

@@ -143,7 +143,7 @@ export function AdminHub({
       )}
       {activeSection === "history" && <OrderHistoryPage orders={orders} items={items} />}
       {activeSection === "qrcodes" && <QrCodesPage items={items} updateItem={updateItem} />}
-      {activeSection === "emergency" && <EmergencyChecklistPage items={items} />}
+      {activeSection === "emergency" && <EmergencyChecklistPage items={items} orders={orders} />}
       {activeSection === "volunteers" && (
         <VolunteersPage
           volunteers={volunteers}

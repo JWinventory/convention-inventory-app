@@ -219,7 +219,7 @@ export function QrCodesPage({ items, updateItem }) {
         ))}
       </div>
 
-      <div style={S.card}>
+      <div className="no-print" style={S.card}>
         <h2 style={S.cardTitle}>Custom QR Code Generator</h2>
         <p style={S.tinyMuted}>
           Create a QR code for any text or link — a sign-up form, WiFi password, a webpage, anything.
@@ -247,27 +247,27 @@ export function QrCodesPage({ items, updateItem }) {
             Generate QR Code
           </button>
         </form>
-
-        {generated && (
-          <div style={{ marginTop: 16 }}>
-            <div className="qr-print-card" data-key="generated" style={qrCardStyle}>
-              <div style={brandHeaderStyle}>CEPC-Lubbock</div>
-              <QRBox payload={generated.text} color={BRAND_BLUE} />
-              <div style={qrLabelStyle}>{generated.label}</div>
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button style={S.addItemBtn} onClick={() => printOneCode("generated")}>
-                Print This Code
-              </button>
-              <button style={S.secondaryBtn} onClick={handleClearGenerated}>
-                Clear
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      <div style={S.card}>
+      {generated && (
+        <div style={S.card}>
+          <div className="qr-print-card" data-key="generated" style={qrCardStyle}>
+            <div style={brandHeaderStyle}>CEPC-Lubbock</div>
+            <QRBox payload={generated.text} color={BRAND_BLUE} />
+            <div style={qrLabelStyle}>{generated.label}</div>
+          </div>
+          <div className="no-print" style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button style={S.addItemBtn} onClick={() => printOneCode("generated")}>
+              Print This Code
+            </button>
+            <button style={S.secondaryBtn} onClick={handleClearGenerated}>
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="no-print" style={S.card}>
         <h2 style={S.cardTitle}>Custom Text Sticker</h2>
         <p style={S.tinyMuted}>
           Bold, eye-catching stickers — no QR code — handy for branding equipment cases, boxes, or
@@ -314,62 +314,62 @@ export function QrCodesPage({ items, updateItem }) {
             Generate Stickers
           </button>
         </form>
+      </div>
 
-        {stickers.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <p style={S.tinyMuted}>
-              {stickers.length === 1
-                ? "1 sticker ready to print."
-                : `${stickers.length} identical stickers ready to print — showing one preview below.`}
-            </p>
+      {stickers.length > 0 && (
+        <div style={S.card}>
+          <p className="no-print" style={S.tinyMuted}>
+            {stickers.length === 1
+              ? "1 sticker ready to print."
+              : `${stickers.length} identical stickers ready to print — showing one preview below.`}
+          </p>
 
-            {/* Only the first sticker is shown on screen — the rest exist
-                purely so "Print All Stickers" produces the full batch. */}
-            <div className="qr-print-grid" style={{ ...qrGridStyle, maxWidth: 220, margin: "0 auto" }}>
-              <div
-                className="qr-print-card sticker-print-card"
-                data-key={stickers[0].key}
-                style={stickers[0].shape === "circle" ? stickerCircleStyle : stickerSquareStyle}
+          {/* Only the first sticker is shown on screen — the rest exist
+              purely so "Print All Stickers" produces the full batch. */}
+          <div className="qr-print-grid" style={{ ...qrGridStyle, maxWidth: 220, margin: "0 auto" }}>
+            <div
+              className="qr-print-card sticker-print-card"
+              data-key={stickers[0].key}
+              style={stickers[0].shape === "circle" ? stickerCircleStyle : stickerSquareStyle}
+            >
+              <div style={stickerTextStyle}>{stickers[0].text}</div>
+              <button
+                className="no-print"
+                style={printOneStickerBtnStyle}
+                onClick={() => printCodes([stickers[0].key])}
               >
-                <div style={stickerTextStyle}>{stickers[0].text}</div>
-                <button
-                  className="no-print"
-                  style={printOneStickerBtnStyle}
-                  onClick={() => printCodes([stickers[0].key])}
-                >
-                  Print This Sticker
-                </button>
-              </div>
-            </div>
-
-            {stickers.length > 1 && (
-              <div className="screen-hide-print-show">
-                <div className="qr-print-grid" style={qrGridStyle}>
-                  {stickers.slice(1).map((s) => (
-                    <div
-                      key={s.key}
-                      className="qr-print-card sticker-print-card"
-                      data-key={s.key}
-                      style={s.shape === "circle" ? stickerCircleStyle : stickerSquareStyle}
-                    >
-                      <div style={stickerTextStyle}>{s.text}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button style={S.addItemBtn} onClick={() => printCodes(stickers.map((s) => s.key))}>
-                Print All Stickers ({stickers.length})
-              </button>
-              <button style={S.secondaryBtn} onClick={handleClearStickers}>
-                Clear
+                Print This Sticker
               </button>
             </div>
           </div>
-        )}
-      </div>
+
+          {stickers.length > 1 && (
+            <div className="screen-hide-print-show">
+              <div className="qr-print-grid" style={qrGridStyle}>
+                {stickers.slice(1).map((s) => (
+                  <div
+                    key={s.key}
+                    className="qr-print-card sticker-print-card"
+                    data-key={s.key}
+                    style={s.shape === "circle" ? stickerCircleStyle : stickerSquareStyle}
+                  >
+                    <div style={stickerTextStyle}>{s.text}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="no-print" style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button style={S.addItemBtn} onClick={() => printCodes(stickers.map((s) => s.key))}>
+              Print All Stickers ({stickers.length})
+            </button>
+            <button style={S.secondaryBtn} onClick={handleClearStickers}>
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={S.adminBar}>
         <h2 style={S.cardTitle}>Printable QR Codes</h2>
@@ -397,7 +397,7 @@ export function QrCodesPage({ items, updateItem }) {
       </div>
 
       {sorted.length > 0 && (
-        <div style={S.toolbar}>
+        <div className="no-print" style={S.toolbar}>
           <div style={S.searchWrap}>
             <Icon.search />
             <input

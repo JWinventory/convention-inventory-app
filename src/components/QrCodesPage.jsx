@@ -13,11 +13,41 @@ function clearPrintMarks() {
   });
 }
 
-// Prints every code on the page, across every item, regardless of
-// which accordion sections happen to be expanded on screen (the print
-// CSS force-expands everything).
+// Turns a department name into a safe DOM id for the "jump to group" nav.
+function deptSlug(name) {
+  return "qr-dept-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+// Same "how many codes does this item get" logic used on-screen, kept as
+// its own helper so the bare print-all grid can compute it for every
+// item in the catalog, not just whichever ones happen to be expanded
+// or match the current search box.
+function codesForItem(item) {
+  const stored = item.qrCount != null ? item.qrCount : item.perUnitQr ? Math.max(Number(item.total) || 0, 1) : 1;
+  const n = Math.max(parseInt(stored, 10) || 1, 1);
+  if (n > 1) {
+    return Array.from({ length: n }, (_, i) => ({
+      key: `${item.id}-${i + 1}`,
+      payload: JSON.stringify({ name: item.name, unit: i + 1 }),
+      label: `${item.name} #${i + 1} of ${n}`,
+    }));
+  }
+  return [{ key: item.id, payload: JSON.stringify({ name: item.name }), label: item.name }];
+}
+
+// Prints every code on the page, across every item in the whole catalog
+// (regardless of search filter or which accordions happen to be open),
+// as a dense, bare grid grouped by department — no forms, no per-item
+// headers, no per-code labels, just codes and a small department line,
+// to fit as many as possible on each page.
 function printAll() {
   clearPrintMarks();
+  document.body.classList.add("print-all-mode");
+  const cleanup = () => {
+    document.body.classList.remove("print-all-mode");
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
   window.print();
 }
 
@@ -74,6 +104,34 @@ export function QrCodesPage({ items, updateItem }) {
 
   const filtered = sorted.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()));
   const selectedIds = Object.keys(selected).filter((id) => selected[id]);
+
+  // The browsing list, grouped by department — so a "jump to group" nav
+  // can scroll straight to one instead of scrolling the whole page.
+  const groupedFiltered = React.useMemo(() => {
+    const byDept = new Map();
+    for (const item of filtered) {
+      const dept = item.category || "Uncategorized";
+      if (!byDept.has(dept)) byDept.set(dept, []);
+      byDept.get(dept).push(item);
+    }
+    return Array.from(byDept.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([department, deptItems]) => ({ department, items: deptItems }));
+  }, [filtered]);
+
+  // Grouped for the bare "Print All" grid — built from every item in the
+  // catalog (not the search-filtered list), by department.
+  const departmentPrintGroups = React.useMemo(() => {
+    const byDept = new Map();
+    for (const item of sorted) {
+      const dept = item.category || "Uncategorized";
+      if (!byDept.has(dept)) byDept.set(dept, []);
+      byDept.get(dept).push(...codesForItem(item));
+    }
+    return Array.from(byDept.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([department, codes]) => ({ department, codes }));
+  }, [sorted]);
 
   function toggleItem(id) {
     setOpenItems((o) => ({ ...o, [id]: !o[id] }));
@@ -138,6 +196,25 @@ export function QrCodesPage({ items, updateItem }) {
 
   return (
     <div className="qr-page-root">
+      <div className="qr-all-print-only">
+        {departmentPrintGroups.map((group) => (
+          <React.Fragment key={group.department}>
+            <div className="qr-dept-label">
+              {group.department} — {group.codes.length} {group.codes.length === 1 ? "code" : "codes"}
+            </div>
+            <div className="qr-print-grid-dense">
+              {group.codes.map((entry) => (
+                <div key={entry.key} className="qr-print-card" style={qrCardStyle}>
+                  <div style={brandHeaderStyle}>CEPC-Lubbock</div>
+                  <QRBox payload={entry.payload} color={BRAND_BLUE} />
+                  <div style={qrLabelStyle}>{entry.label}</div>
+                </div>
+              ))}
+            </div>
+          </React.Fragment>
+        ))}
+      </div>
+
       <div style={S.card}>
         <h2 style={S.cardTitle}>Custom QR Code Generator</h2>
         <p style={S.tinyMuted}>
@@ -311,6 +388,24 @@ export function QrCodesPage({ items, updateItem }) {
         </div>
       )}
 
+      {groupedFiltered.length > 1 && (
+        <div className="no-print" style={quickNavWrapStyle}>
+          {groupedFiltered.map((g) => (
+            <button
+              key={g.department}
+              type="button"
+              style={quickNavChipStyle}
+              onClick={() => {
+                const el = document.getElementById(deptSlug(g.department));
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+            >
+              {g.department}
+            </button>
+          ))}
+        </div>
+      )}
+
       {selectedIds.length > 0 && (
         <div style={selectedBarStyle}>
           <span>
@@ -331,82 +426,95 @@ export function QrCodesPage({ items, updateItem }) {
         <div style={S.card}>
           <p style={S.tinyMuted}>No items in the catalog yet.</p>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : groupedFiltered.length === 0 ? (
         <div style={S.card}>
           <p style={S.tinyMuted}>No items match "{search}".</p>
         </div>
       ) : (
         <div style={S.card}>
-          {filtered.map((item) => {
-            const count = countFor(item);
-            const n = Math.max(parseInt(count, 10) || 1, 1);
-            const codes =
-              n > 1
-                ? Array.from({ length: n }, (_, i) => ({
-                    key: `${item.id}-${i + 1}`,
-                    payload: JSON.stringify({ name: item.name, unit: i + 1 }),
-                    label: `${item.name} #${i + 1} of ${n}`,
-                  }))
-                : [{ key: item.id, payload: JSON.stringify({ name: item.name }), label: item.name }];
-            const isOpen = Boolean(openItems[item.id]);
-
+          {groupedFiltered.map((group) => {
+            const deptItemIds = group.items.map((it) => it.id);
             return (
-              <div key={item.id} className="accordion-item" data-item-id={item.id} style={accordionItemStyle}>
-                <div style={accordionHeaderStyle}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <input
-                      className="no-print"
-                      type="checkbox"
-                      checked={Boolean(selected[item.id])}
-                      onChange={() => toggleSelected(item.id)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <div onClick={() => toggleItem(item.id)} style={{ cursor: "pointer" }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: "#1a1a2e" }}>{item.name}</div>
-                      <div style={S.tinyMuted}>{n === 1 ? "1 code" : `${n} codes`}</div>
-                    </div>
-                  </div>
-                  <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#888" }}>
-                      Codes:
-                      <input
-                        type="number"
-                        min="1"
-                        style={countInputStyle}
-                        value={count}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => setCountDrafts((d) => ({ ...d, [item.id]: e.target.value }))}
-                        onBlur={() => commitCount(item)}
-                      />
-                    </label>
-                    <button
-                      style={printGroupBtnStyle}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        printItemGroups([item.id]);
-                      }}
-                    >
-                      Print All
-                    </button>
-                    <span style={{ color: "#bbb", fontSize: 18, cursor: "pointer" }} onClick={() => toggleItem(item.id)}>
-                      {isOpen ? "⌄" : "›"}
-                    </span>
-                  </div>
+              <div key={group.department} id={deptSlug(group.department)} className="qr-dept-section">
+                <div className="no-print" style={deptSectionHeaderStyle}>
+                  <span style={deptSectionTitleStyle}>{group.department}</span>
+                  <button style={printGroupBtnStyle} onClick={() => printItemGroups(deptItemIds)}>
+                    Print All in Group
+                  </button>
                 </div>
-                <div className="accordion-body" style={{ display: isOpen ? "block" : "none", paddingBottom: 14 }}>
-                  <div className="qr-print-grid" style={qrGridStyle}>
-                    {codes.map((entry) => (
-                      <div key={entry.key} className="qr-print-card" data-key={entry.key} style={qrCardStyle}>
-                        <div style={brandHeaderStyle}>CEPC-Lubbock</div>
-                        <QRBox payload={entry.payload} color={BRAND_BLUE} />
-                        <div style={qrLabelStyle}>{entry.label}</div>
-                        <button className="no-print" style={printOneBtnStyle} onClick={() => printOneCode(entry.key)}>
-                          Print This Code
-                        </button>
+                {group.items.map((item) => {
+                  const count = countFor(item);
+                  const n = Math.max(parseInt(count, 10) || 1, 1);
+                  const codes =
+                    n > 1
+                      ? Array.from({ length: n }, (_, i) => ({
+                          key: `${item.id}-${i + 1}`,
+                          payload: JSON.stringify({ name: item.name, unit: i + 1 }),
+                          label: `${item.name} #${i + 1} of ${n}`,
+                        }))
+                      : [{ key: item.id, payload: JSON.stringify({ name: item.name }), label: item.name }];
+                  const isOpen = Boolean(openItems[item.id]);
+
+                  return (
+                    <div key={item.id} className="accordion-item" data-item-id={item.id} style={accordionItemStyle}>
+                      <div style={accordionHeaderStyle}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <input
+                            className="no-print"
+                            type="checkbox"
+                            checked={Boolean(selected[item.id])}
+                            onChange={() => toggleSelected(item.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div onClick={() => toggleItem(item.id)} style={{ cursor: "pointer" }}>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: "#1a1a2e" }}>{item.name}</div>
+                            <div style={S.tinyMuted}>{n === 1 ? "1 code" : `${n} codes`}</div>
+                          </div>
+                        </div>
+                        <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#888" }}>
+                            Codes:
+                            <input
+                              type="number"
+                              min="1"
+                              style={countInputStyle}
+                              value={count}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => setCountDrafts((d) => ({ ...d, [item.id]: e.target.value }))}
+                              onBlur={() => commitCount(item)}
+                            />
+                          </label>
+                          <button
+                            style={printGroupBtnStyle}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              printItemGroups([item.id]);
+                            }}
+                          >
+                            Print All
+                          </button>
+                          <span style={{ color: "#bbb", fontSize: 18, cursor: "pointer" }} onClick={() => toggleItem(item.id)}>
+                            {isOpen ? "⌄" : "›"}
+                          </span>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <div className="accordion-body" style={{ display: isOpen ? "block" : "none", paddingBottom: 14 }}>
+                        <div className="qr-print-grid" style={qrGridStyle}>
+                          {codes.map((entry) => (
+                            <div key={entry.key} className="qr-print-card" data-key={entry.key} style={qrCardStyle}>
+                              <div style={brandHeaderStyle}>CEPC-Lubbock</div>
+                              <QRBox payload={entry.payload} color={BRAND_BLUE} />
+                              <div style={qrLabelStyle}>{entry.label}</div>
+                              <button className="no-print" style={printOneBtnStyle} onClick={() => printOneCode(entry.key)}>
+                                Print This Code
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -415,6 +523,7 @@ export function QrCodesPage({ items, updateItem }) {
 
       <style>{`
         .screen-hide-print-show { display: none; }
+        .qr-all-print-only { display: none; }
         @media print {
           body * { visibility: hidden; }
           .qr-page-root, .qr-page-root * { visibility: visible; }
@@ -435,6 +544,32 @@ export function QrCodesPage({ items, updateItem }) {
           }
           .qr-page-root:has(.accordion-item.qr-print-only-group) .accordion-item:not(.qr-print-only-group) {
             display: none;
+          }
+
+          /* "Print All QR Codes" — bare codes only, grouped by department,
+             to maximize how many fit on each page. Everything else on
+             this page (forms, search bar, per-item headers/branding/
+             labels) is hidden while this mode is active. */
+          body.print-all-mode .qr-page-root > *:not(.qr-all-print-only) {
+            display: none !important;
+          }
+          body.print-all-mode .qr-all-print-only {
+            display: block !important;
+          }
+          .qr-dept-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: #555;
+            margin: 10px 0 4px;
+            break-after: avoid;
+          }
+          .qr-print-grid-dense {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 16px;
+            margin-bottom: 14px;
           }
         }
       `}</style>
@@ -460,6 +595,45 @@ const printGroupBtnStyle = {
   fontWeight: 700,
   cursor: "pointer",
   whiteSpace: "nowrap",
+};
+
+const quickNavWrapStyle = {
+  display: "flex",
+  gap: 8,
+  overflowX: "auto",
+  paddingBottom: 8,
+  marginBottom: 4,
+  WebkitOverflowScrolling: "touch",
+};
+
+const quickNavChipStyle = {
+  background: "#eaf3fc",
+  color: "#2471a3",
+  border: "1px solid #b8d9f5",
+  borderRadius: 999,
+  padding: "6px 14px",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+const deptSectionHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "14px 4px 8px",
+  borderTop: "1px solid #eee",
+  marginTop: 4,
+};
+
+const deptSectionTitleStyle = {
+  fontSize: 12,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: 0.4,
+  color: "#555",
 };
 const countInputStyle = {
   width: 46,

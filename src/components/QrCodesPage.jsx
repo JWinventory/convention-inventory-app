@@ -6,6 +6,9 @@ import { S, NAVY } from "../styles";
 // Change this one value if you get the exact official jw.org blue hex —
 // it controls the color of every QR code on this page.
 const BRAND_BLUE = "#0072CE";
+// A lighter tint of the brand blue, used for the department "ribbon"
+// section headers in the browsing list.
+const RIBBON_BLUE = "#4DA6E0";
 
 function clearPrintMarks() {
   document.querySelectorAll(".qr-print-only, .qr-print-only-group").forEach((el) => {
@@ -101,6 +104,7 @@ export function QrCodesPage({ items, updateItem }) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState({}); // { [itemId]: true }
   const [countDrafts, setCountDrafts] = useState({}); // { [itemId]: "5" } while editing
+  const [paperSize, setPaperSize] = useState("letter"); // "letter" | "tabloid" (11x17) — applies to any print from this page
 
   const filtered = sorted.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()));
   const selectedIds = Object.keys(selected).filter((id) => selected[id]);
@@ -374,6 +378,24 @@ export function QrCodesPage({ items, updateItem }) {
         </button>
       </div>
 
+      <div className="no-print" style={paperSizeRowStyle}>
+        <span style={{ fontSize: 11, color: "#888", fontWeight: 700 }}>Paper Size:</span>
+        <button
+          type="button"
+          style={{ ...S.catTab, ...(paperSize === "letter" ? S.catTabActive : {}) }}
+          onClick={() => setPaperSize("letter")}
+        >
+          Letter
+        </button>
+        <button
+          type="button"
+          style={{ ...S.catTab, ...(paperSize === "tabloid" ? S.catTabActive : {}) }}
+          onClick={() => setPaperSize("tabloid")}
+        >
+          11×17 (Tabloid)
+        </button>
+      </div>
+
       {sorted.length > 0 && (
         <div style={S.toolbar}>
           <div style={S.searchWrap}>
@@ -438,7 +460,7 @@ export function QrCodesPage({ items, updateItem }) {
               <div key={group.department} id={deptSlug(group.department)} className="qr-dept-section">
                 <div className="no-print" style={deptSectionHeaderStyle}>
                   <span style={deptSectionTitleStyle}>{group.department}</span>
-                  <button style={printGroupBtnStyle} onClick={() => printItemGroups(deptItemIds)}>
+                  <button style={deptPrintBtnStyle} onClick={() => printItemGroups(deptItemIds)}>
                     Print All in Group
                   </button>
                 </div>
@@ -524,6 +546,10 @@ export function QrCodesPage({ items, updateItem }) {
       <style>{`
         .screen-hide-print-show { display: none; }
         .qr-all-print-only { display: none; }
+        @page {
+          size: ${paperSize === "tabloid" ? "11in 17in" : "letter"};
+          margin: 0.4in;
+        }
         @media print {
           body * { visibility: hidden; }
           .qr-page-root, .qr-page-root * { visibility: visible; }
@@ -597,6 +623,13 @@ const printGroupBtnStyle = {
   whiteSpace: "nowrap",
 };
 
+const paperSizeRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 12,
+};
+
 const quickNavWrapStyle = {
   display: "flex",
   gap: 8,
@@ -623,17 +656,32 @@ const deptSectionHeaderStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  padding: "14px 4px 8px",
-  borderTop: "1px solid #eee",
-  marginTop: 4,
+  padding: "10px 14px",
+  marginTop: 16,
+  marginBottom: 8,
+  background: RIBBON_BLUE,
+  borderRadius: 8,
+  boxShadow: "0 2px 6px rgba(77,166,224,0.35)",
 };
 
 const deptSectionTitleStyle = {
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 800,
   textTransform: "uppercase",
-  letterSpacing: 0.4,
-  color: "#555",
+  letterSpacing: 0.5,
+  color: "#fff",
+};
+
+const deptPrintBtnStyle = {
+  background: "rgba(255,255,255,0.92)",
+  color: "#0b5ea8",
+  border: "none",
+  borderRadius: 6,
+  padding: "5px 10px",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
 const countInputStyle = {
   width: 46,

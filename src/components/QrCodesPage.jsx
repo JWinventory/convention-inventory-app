@@ -587,7 +587,32 @@ export function QrCodesPage({ items, updateItem }) {
             display: block !important;
           }
           .screen-hide-print-show { display: block; }
-          .qr-print-card { page-break-inside: avoid; box-shadow: none !important; }
+          /* Every printed QR code (any print action) comes out a
+             consistent, fixed 2x2in card — same footprint as the text
+             stickers below. The canvas shrinks to fit whatever room is
+             left after the brand header and label text, landing around
+             1.4-1.5in of actual code, comfortably scannable with room
+             to spare. */
+          .qr-print-card {
+            page-break-inside: avoid;
+            box-shadow: none !important;
+            width: 2in !important;
+            height: 2in !important;
+            max-width: none !important;
+            box-sizing: border-box;
+            display: flex !important;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            overflow: hidden;
+          }
+          .qr-print-card canvas {
+            width: auto !important;
+            height: auto !important;
+            max-width: 1.5in !important;
+            max-height: 1.5in !important;
+          }
           .sticker-print-card {
             width: 2in !important;
             height: 2in !important;
@@ -624,9 +649,10 @@ export function QrCodesPage({ items, updateItem }) {
           }
           .qr-print-grid-dense {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(auto-fill, minmax(2in, 1fr));
+            gap: 0.2in;
             margin-bottom: 14px;
+            justify-items: center;
           }
         }
       `}</style>

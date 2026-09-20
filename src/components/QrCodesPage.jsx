@@ -101,6 +101,7 @@ function printItemGroups(itemIds) {
 export function QrCodesPage({ items, updateItem }) {
   const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
   const [openItems, setOpenItems] = useState({});
+  const [openDepts, setOpenDepts] = useState({}); // { [department]: true } — collapsed by default
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState({}); // { [itemId]: true }
   const [countDrafts, setCountDrafts] = useState({}); // { [itemId]: "5" } while editing
@@ -418,6 +419,7 @@ export function QrCodesPage({ items, updateItem }) {
               type="button"
               style={quickNavChipStyle}
               onClick={() => {
+                setOpenDepts((d) => ({ ...d, [g.department]: true }));
                 const el = document.getElementById(deptSlug(g.department));
                 if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
               }}
@@ -458,12 +460,28 @@ export function QrCodesPage({ items, updateItem }) {
             const deptItemIds = group.items.map((it) => it.id);
             return (
               <div key={group.department} id={deptSlug(group.department)} className="qr-dept-section">
-                <div className="no-print" style={deptSectionHeaderStyle}>
-                  <span style={deptSectionTitleStyle}>{group.department}</span>
-                  <button style={deptPrintBtnStyle} onClick={() => printItemGroups(deptItemIds)}>
+                <div
+                  className="no-print"
+                  style={{ ...deptSectionHeaderStyle, cursor: "pointer" }}
+                  onClick={() => setOpenDepts((d) => ({ ...d, [group.department]: !d[group.department] }))}
+                >
+                  <span style={deptSectionTitleStyle}>
+                    <span style={{ display: "inline-block", marginRight: 6 }}>
+                      {openDepts[group.department] ? "⌄" : "›"}
+                    </span>
+                    {group.department}
+                  </span>
+                  <button
+                    style={deptPrintBtnStyle}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      printItemGroups(deptItemIds);
+                    }}
+                  >
                     Print All in Group
                   </button>
                 </div>
+                <div className="dept-items-body" style={{ display: openDepts[group.department] ? "block" : "none" }}>
                 {group.items.map((item) => {
                   const count = countFor(item);
                   const n = Math.max(parseInt(count, 10) || 1, 1);
@@ -537,6 +555,7 @@ export function QrCodesPage({ items, updateItem }) {
                     </div>
                   );
                 })}
+                </div>
               </div>
             );
           })}
@@ -554,7 +573,19 @@ export function QrCodesPage({ items, updateItem }) {
           body * { visibility: hidden; }
           .qr-page-root, .qr-page-root * { visibility: visible; }
           .qr-page-root { position: absolute; left: 0; top: 0; width: 100%; }
-          .accordion-body { display: block !important; }
+          /* Only force open the specific department section(s) and item(s)
+             actually being printed — forcing the whole catalog open (as a
+             blanket rule once did) makes the browser lay out every hidden
+             QR canvas on every print action, which is what caused the lag
+             on mobile. */
+          .qr-dept-section:has(.accordion-item.qr-print-only-group) .dept-items-body,
+          .qr-dept-section:has(.qr-print-card.qr-print-only) .dept-items-body {
+            display: block !important;
+          }
+          .accordion-item.qr-print-only-group .accordion-body,
+          .accordion-item:has(.qr-print-card.qr-print-only) .accordion-body {
+            display: block !important;
+          }
           .screen-hide-print-show { display: block; }
           .qr-print-card { page-break-inside: avoid; box-shadow: none !important; }
           .sticker-print-card {

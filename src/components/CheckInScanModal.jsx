@@ -37,23 +37,43 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   const remaining = lineItems.filter((li) => li.stillOut > 0);
   const allDone = lineItems.length > 0 && remaining.length === 0;
 
-  function stopCamera() {
+  // Fully stops and tears down the camera before returning. Pulls the
+  // instance out of the ref FIRST so it's safe to call this more than
+  // once (e.g. once from the "all done" effect and again from the
+  // scanner effect's own cleanup) — a second call just finds nothing
+  // left to do instead of racing the first one.
+  async function stopCamera() {
     const instance = scannerInstanceRef.current;
+    scannerInstanceRef.current = null;
     if (!instance) return;
-    instance
-      .stop()
-      .catch(() => {})
-      .finally(() => {
-        instance.clear().catch(() => {});
-      });
+    try {
+      await instance.stop();
+    } catch (e) {
+      // already stopped, or never fully started — nothing to do
+    }
+    try {
+      await instance.clear();
+    } catch (e) {
+      // the scanner region's DOM node may already be gone — fine
+    }
   }
 
-  // Once everything's checked in, stop the camera (no reason to keep it
-  // running) and switch to the completion screen.
+  // Once everything's checked in, fully stop the camera and ONLY THEN
+  // switch to the completion screen. Switching screens unmounts the
+  // camera's DOM element — if that happens before the camera library
+  // finishes its own cleanup of that same element, it throws trying to
+  // tear down a node that's already gone, which crashes the whole page
+  // (the classic React vs. imperative-DOM-library conflict). Awaiting
+  // stopCamera() first avoids that race entirely.
   useEffect(() => {
     if (!allDone) return;
-    stopCamera();
-    setCompleted(true);
+    let cancelled = false;
+    stopCamera().then(() => {
+      if (!cancelled) setCompleted(true);
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDone]);
 
@@ -74,6 +94,7 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
 
     const name = payload.name;
     const now = Date.now();
+
     // Debounce by the exact code (not just the item name) — items with a
     // separate QR code per unit share the same name, so keying on the
     // full code lets distinct physical units be scanned back-to-back
@@ -92,14 +113,19 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
       showFlash(`${name} is already checked in.`, "ok");
       return;
     }
+
     const liveItem = itemsRef.current.find((i) => i.name === name);
     if (!liveItem) {
       showFlash("That item couldn't be found in the catalog.", "error");
       return;
     }
 
-    await onResolveActionRef.current(liveItem.id, -1);
-    showFlash(`Checked in: ${name}`, "ok");
+    try {
+      await onResolveActionRef.current(liveItem.id, -1);
+      showFlash(`Checked in: ${name}`, "ok");
+    } catch (e) {
+      showFlash("Couldn't check that item in — try again.", "error");
+    }
   }
 
   useEffect(() => {
@@ -132,7 +158,9 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   async function handleManualCheckIn() {
     if (!missingItemName || !missingNote.trim()) return;
     const li = lineItemsRef.current.find((l) => l.name === missingItemName);
-    const liveItem = itemsRef.current.find((i) => i.name === missingItemName);    if (!li || !liveItem) return;
+    const liveItem = itemsRef.current.find((i) => i.name === missingItemName);
+    if (!li || !liveItem) return;
+
     setSubmitting(true);
     try {
       await onResolveActionRef.current(liveItem.id, -1, missingNote.trim());
@@ -209,7 +237,6 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
               </div>
             ))}
           </div>
-
           <button style={{ ...S.secondaryBtn, marginTop: 10 }} onClick={() => setMissingOpen(true)}>
             Missing QR Code?
           </button>

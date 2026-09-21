@@ -7,19 +7,37 @@ import { S } from "../styles";
 const SCANNER_ID = "checkin-camera-region";
 const PENDING_TIMEOUT_MS = 1200; // how long a detected code stays "in focus" without a fresh sighting
 
-// A check-in scanner for Phase 3: point the camera at an item's QR code,
-// and once it's in focus, tap Capture to check it in. A live summary up
-// top shows how many of the total units are checked in and which
-// specific items are still outstanding, so it's obvious at a glance
-// what's left to collect rather than needing to scan the whole list. A
-// "Missing QR Code?" option lets an item be checked in manually when
-// its code is damaged or missing, but requires a short note before
-// it'll proceed. Once everything's checked in, the camera stops and a
-// completion screen takes over until the requester chooses to leave.
-export function CheckInScanModal({ lineItems, items, onResolveAction, onClose }) {
+// A check-in scanner for Phase 3: scanning is automatic — point the
+// camera at an item's QR code and it checks in on its own — with an
+// optional Capture button as a manual backup for when a code is tricky
+// to auto-detect. A live summary up top shows how many of the total
+// units are checked in; for items with per-unit codes, it tracks the
+// SPECIFIC unit numbers seen this session and calls out exactly which
+// ones are still missing (e.g. "Missing: #4, #6") rather than just a
+// count, as long as this session accounts for everything checked in so
+// far (if some were checked in during an earlier session, there's no
+// way to know which specific units those were, so it falls back to a
+// plain count instead of guessing). A "Missing QR Code?" option lets an
+// item be checked in manually when its code is damaged or missing, but
+// requires a short note before it'll proceed. Once everything's
+// checked in, the camera stops and a completion screen takes over
+// until the requester chooses to leave.
+export function CheckInScanModal({ order, lineItems, items, onResolveAction, onUpdateOrder, onClose }) {
   const [flash, setFlash] = useState(null); // { text, tone: "ok" | "error" } | null
-  const [pendingScan, setPendingScan] = useState(null); // { code, name } | null — currently in focus, awaiting capture
+  const [pendingScan, setPendingScan] = useState(null); // { code, name } | null — currently in focus
   const [capturing, setCapturing] = useState(false);
+  // { [itemName]: Set<number> } — unit numbers seen, seeded from whatever
+  // was already saved on the order (Firestore), so an interrupted session
+  // (lost connection, dead battery, closed tab) picks back up with the
+  // specific numbers intact instead of losing track of what's missing.
+  const [scannedUnits, setScannedUnits] = useState(() => {
+    const stored = (order && order.checkedInUnits) || {};
+    const initial = {};
+    for (const name of Object.keys(stored)) {
+      initial[name] = new Set(stored[name] || []);
+    }
+    return initial;
+  });
   const [missingOpen, setMissingOpen] = useState(false);
   const [missingItemName, setMissingItemName] = useState("");
   const [missingNote, setMissingNote] = useState("");
@@ -29,7 +47,7 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   const lineItemsRef = useRef(lineItems);
   const itemsRef = useRef(items);
   const onResolveActionRef = useRef(onResolveAction);
-  const lastCapturedRef = useRef({ code: null, at: 0 });
+  const lastProcessedRef = useRef({ code: null, at: 0 });
   const pendingLastSeenRef = useRef(0);
   const scannerInstanceRef = useRef(null);
 
@@ -44,6 +62,40 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   const totalUnits = lineItems.reduce((sum, li) => sum + li.qty, 0);
   const checkedInUnits = totalUnits - remaining.reduce((sum, li) => sum + li.stillOut, 0);
 
+  // Describes what's left for one line item. If this session's own
+  // scans account for every unit already checked in for this item (so
+  // we can trust which specific numbers we've seen), names the exact
+  // missing unit numbers; otherwise falls back to a plain count, since
+  // some may have been checked in in an earlier session we have no
+  // record of.
+  function progressLabel(li) {
+    const alreadyDone = li.qty - li.stillOut;
+    const seen = scannedUnits[li.name] || new Set();
+    if (li.qty > 1 && seen.size === alreadyDone) {
+      const missing = [];
+      for (let n = 1; n <= li.qty; n++) {
+        if (!seen.has(n)) missing.push(n);
+      }
+      if (missing.length === li.stillOut) {
+        return missing.length > 0 ? `Missing: #${missing.join(", #")}` : "All checked in";
+      }
+    }
+    return li.stillOut > 0 ? `${li.stillOut} more needed` : "All checked in";
+  }
+
+  // Groups a list of line items by department (category), sorted by
+  // department name, for the "save/organize by department" views below.
+  function groupByDepartment(list) {
+    const byDept = new Map();
+    for (const li of list) {
+      const dept = li.category || "Uncategorized";
+      if (!byDept.has(dept)) byDept.set(dept, []);
+      byDept.get(dept).push(li);
+    }
+    return Array.from(byDept.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([department, deptItems]) => ({ department, items: deptItems }));
+  }
   // A detected code stops counting as "in focus" if it hasn't been seen
   // again in the last PENDING_TIMEOUT_MS — covers the case where it's
   // moved out of frame without a distinct "lost tracking" event from
@@ -103,9 +155,79 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
     setTimeout(() => setFlash((f) => (f && f.text === text ? null : f)), 1400);
   }
 
+  function recordUnitSeen(name, unit) {
+    if (typeof unit !== "number") return;
+    setScannedUnits((prev) => {
+      const set = new Set(prev[name] || []);
+      set.add(unit);
+      const next = { ...prev, [name]: set };
+      persistScannedUnits(next);
+      return next;
+    });
+  }
+
+  // Saves the full scanned-units map to the order in Firestore after
+  // every successful scan, so progress survives a lost connection, a
+  // dead battery, or the tab just being closed — reopening the scanner
+  // later (even on a different device) picks back up with the exact
+  // same specific unit numbers already accounted for.
+  function persistScannedUnits(unitsMap) {
+    if (!order || !onUpdateOrder) return;
+    const plain = {};
+    for (const name of Object.keys(unitsMap)) {
+      plain[name] = Array.from(unitsMap[name]);
+    }
+    onUpdateOrder(order.id, { checkedInUnits: plain });
+  }
+
+  // The actual check-in logic — called automatically on every detected
+  // code, and also from the Capture button as a manual backup. Safe to
+  // call more than once for the same physical code in quick succession;
+  // the debounce below makes a repeat call for the same code within a
+  // couple seconds a no-op.
+  async function processCode(trimmed) {
+    const now = Date.now();
+    if (lastProcessedRef.current.code === trimmed && now - lastProcessedRef.current.at < 2500) {
+      return;
+    }
+    lastProcessedRef.current = { code: trimmed, at: now };
+
+    let payload;
+    try {
+      payload = JSON.parse(trimmed);
+    } catch (e) {
+      showFlash("That QR code isn't recognized.", "error");
+      return;
+    }
+
+    const name = payload.name;
+    const li = lineItemsRef.current.find((l) => l.name === name);
+    if (!li) {
+      showFlash("That item isn't part of this order.", "error");
+      return;
+    }
+    if (li.stillOut <= 0) {
+      showFlash(`${name} is already checked in.`, "ok");
+      return;
+    }
+    const liveItem = itemsRef.current.find((i) => i.name === name);
+    if (!liveItem) {
+      showFlash("That item couldn't be found in the catalog.", "error");
+      return;
+    }
+
+    try {
+      await onResolveActionRef.current(liveItem.id, -1);
+      recordUnitSeen(name, payload.unit);
+      showFlash(`Checked in: ${name}`, "ok");
+    } catch (e) {
+      showFlash("Couldn't check that item in — try again.", "error");
+    }
+  }
+
   // Called continuously by the scanner for every successful decode —
-  // just tracks what's currently in focus. Nothing is checked in until
-  // the volunteer taps Capture.
+  // tracks what's in focus (for the optional Capture button and the
+  // "in focus" hint) AND automatically attempts to check it in.
   function handleDetected(decodedText) {
     const trimmed = decodedText.trim();
     pendingLastSeenRef.current = Date.now();
@@ -120,53 +242,16 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
       }
       return { code: trimmed, name };
     });
+    processCode(trimmed);
   }
 
   async function handleCapture() {
     if (!pendingScan || capturing) return;
-    const { code: trimmed, name } = pendingScan;
-    const now = Date.now();
-
-    // Guards against a double-tap, or the same code still sitting in
-    // frame, capturing the same physical unit twice in a row.
-    if (lastCapturedRef.current.code === trimmed && now - lastCapturedRef.current.at < 2500) {
-      return;
-    }
-    lastCapturedRef.current = { code: trimmed, at: now };
-
-    if (!name) {
-      showFlash("That QR code isn't recognized.", "error");
-      setPendingScan(null);
-      return;
-    }
-
-    const li = lineItemsRef.current.find((l) => l.name === name);
-    if (!li) {
-      showFlash("That item isn't part of this order.", "error");
-      setPendingScan(null);
-      return;
-    }
-    if (li.stillOut <= 0) {
-      showFlash(`${name} is already checked in.`, "ok");
-      setPendingScan(null);
-      return;
-    }
-    const liveItem = itemsRef.current.find((i) => i.name === name);
-    if (!liveItem) {
-      showFlash("That item couldn't be found in the catalog.", "error");
-      setPendingScan(null);
-      return;
-    }
-
     setCapturing(true);
     try {
-      await onResolveActionRef.current(liveItem.id, -1);
-      showFlash(`Checked in: ${name}`, "ok");
-    } catch (e) {
-      showFlash("Couldn't check that item in — try again.", "error");
+      await processCode(pendingScan.code);
     } finally {
       setCapturing(false);
-      setPendingScan(null);
     }
   }
 
@@ -238,7 +323,8 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
       {!missingOpen && (
         <>
           <p style={S.modalHint}>
-            Point the camera at an item's QR code, then tap Capture once it's in focus.
+            Point the camera at each item's QR code — it checks in automatically. If a code won't focus,
+            tap Capture once it's in view.
           </p>
           <div style={{ ...S.card, padding: "10px 12px", marginBottom: 10 }}>
             <div style={{ fontWeight: 700, color: "#1a1a2e" }}>
@@ -246,7 +332,12 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
             </div>
             {remaining.length > 0 && (
               <div style={{ ...S.tinyMuted, marginTop: 4 }}>
-                Still needed: {remaining.map((li) => `${li.name} (${li.stillOut})`).join(", ")}
+                {groupByDepartment(remaining).map((group) => (
+                  <div key={group.department}>
+                    <strong>{group.department}:</strong>{" "}
+                    {group.items.map((li) => `${li.name} — ${progressLabel(li)}`).join("; ")}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -290,23 +381,30 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
             </div>
             <button
               style={{
-                ...S.primaryBtn,
+                ...S.secondaryBtn,
                 ...(!pendingScan || capturing ? S.btnDisabled : {}),
               }}
               disabled={!pendingScan || capturing}
               onClick={handleCapture}
             >
-              {capturing ? "Checking In…" : "Capture"}
+              {capturing ? "Checking In…" : "Capture (optional)"}
             </button>
           </div>
 
           <div style={{ ...S.summaryListWrap, marginTop: 4 }}>
-            {lineItems.map((li, idx) => (
-              <div key={idx} style={S.summaryRow}>
-                <span>{li.name}</span>
-                <span style={S.summaryQty}>
-                  {li.qty - li.stillOut} of {li.qty} checked in
-                </span>
+            {groupByDepartment(lineItems).map((group) => (
+              <div key={group.department}>
+                <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", color: "#888", margin: "8px 0 2px" }}>
+                  {group.department}
+                </div>
+                {group.items.map((li, idx) => (
+                  <div key={idx} style={S.summaryRow}>
+                    <span>{li.name}</span>
+                    <span style={S.summaryQty}>
+                      {li.qty - li.stillOut} of {li.qty} — {progressLabel(li)}
+                    </span>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -330,10 +428,14 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
               onChange={(e) => setMissingItemName(e.target.value)}
             >
               <option value="">Select an item…</option>
-              {remaining.map((li) => (
-                <option key={li.name} value={li.name}>
-                  {li.name} ({li.qty - li.stillOut} of {li.qty} checked in)
-                </option>
+              {groupByDepartment(remaining).map((group) => (
+                <optgroup key={group.department} label={group.department}>
+                  {group.items.map((li) => (
+                    <option key={li.name} value={li.name}>
+                      {li.name} ({li.qty - li.stillOut} of {li.qty} checked in)
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </label>

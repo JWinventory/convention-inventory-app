@@ -210,9 +210,9 @@ export function QrCodesPage({ items, updateItem }) {
             <div className="qr-print-grid-dense">
               {group.codes.map((entry) => (
                 <div key={entry.key} className="qr-print-card" style={qrCardStyle}>
-                  <div style={brandHeaderStyle}>CEPC-Lubbock</div>
+                  <div className="qr-brand-header" style={brandHeaderStyle}>CEPC-Lubbock</div>
                   <QRBox payload={entry.payload} color={BRAND_BLUE} />
-                  <div style={qrLabelStyle}>{entry.label}</div>
+                  <div className="qr-code-label" style={qrLabelStyle}>{entry.label}</div>
                 </div>
               ))}
             </div>
@@ -253,9 +253,9 @@ export function QrCodesPage({ items, updateItem }) {
       {generated && (
         <div style={S.card}>
           <div className="qr-print-card" data-key="generated" style={qrCardStyle}>
-            <div style={brandHeaderStyle}>CEPC-Lubbock</div>
+            <div className="qr-brand-header" style={brandHeaderStyle}>CEPC-Lubbock</div>
             <QRBox payload={generated.text} color={BRAND_BLUE} />
-            <div style={qrLabelStyle}>{generated.label}</div>
+            <div className="qr-code-label" style={qrLabelStyle}>{generated.label}</div>
           </div>
           <div className="no-print" style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button style={S.addItemBtn} onClick={() => printOneCode("generated")}>
@@ -542,9 +542,9 @@ export function QrCodesPage({ items, updateItem }) {
                         <div className="qr-print-grid" style={qrGridStyle}>
                           {codes.map((entry) => (
                             <div key={entry.key} className="qr-print-card" data-key={entry.key} style={qrCardStyle}>
-                              <div style={brandHeaderStyle}>CEPC-Lubbock</div>
+                              <div className="qr-brand-header" style={brandHeaderStyle}>CEPC-Lubbock</div>
                               <QRBox payload={entry.payload} color={BRAND_BLUE} />
-                              <div style={qrLabelStyle}>{entry.label}</div>
+                              <div className="qr-code-label" style={qrLabelStyle}>{entry.label}</div>
                               <button className="no-print" style={printOneBtnStyle} onClick={() => printOneCode(entry.key)}>
                                 Print This Code
                               </button>
@@ -597,7 +597,8 @@ export function QrCodesPage({ items, updateItem }) {
             page-break-inside: avoid;
             box-shadow: none !important;
             width: 2in !important;
-            height: 2in !important;
+            height: auto !important;
+            min-height: 2in !important;
             max-width: none !important;
             box-sizing: border-box;
             display: flex !important;
@@ -605,13 +606,22 @@ export function QrCodesPage({ items, updateItem }) {
             align-items: center;
             justify-content: center;
             margin: 0 auto;
-            overflow: hidden;
+            padding: 0.08in !important;
           }
           .qr-print-card canvas {
             width: auto !important;
             height: auto !important;
-            max-width: 1.5in !important;
-            max-height: 1.5in !important;
+            max-width: 1.3in !important;
+            max-height: 1.3in !important;
+          }
+          .qr-brand-header {
+            font-size: 11px !important;
+            margin-bottom: 2px !important;
+          }
+          .qr-code-label {
+            font-size: 9px !important;
+            margin-top: 3px !important;
+            line-height: 1.2 !important;
           }
           .sticker-print-card {
             width: 2in !important;

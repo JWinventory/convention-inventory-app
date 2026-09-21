@@ -255,28 +255,56 @@ export function CheckInScanModal({ order, lineItems, items, onResolveAction, onU
     }
   }
 
+  // Picks a specific camera instead of leaving it to the browser: bare
+  // { facingMode: "environment" } lets it choose ANY back-facing lens on
+  // a multi-camera phone, and it often grabs the ultra-wide one — which
+  // has a much longer minimum focus distance and more distortion up
+  // close, making a QR code hard to focus on. This filters those out
+  // and picks the plain standard back camera instead, falling back to
+  // facingMode only if the device list can't be read for some reason.
+  async function pickBestCamera() {
+    try {
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras || cameras.length === 0) return null;
+      const isFront = (label) => /front|user|selfie/i.test(label);
+      const isWide = (label) => /ultra[\s-]?wide|wide[\s-]?angle|telephoto|macro/i.test(label);
+      const plainBack = cameras.find((c) => !isFront(c.label) && !isWide(c.label));
+      if (plainBack) return plainBack.id;
+      const anyBack = cameras.find((c) => !isFront(c.label));
+      return anyBack ? anyBack.id : cameras[0].id;
+    } catch (e) {
+      return null; // couldn't enumerate — fall back to facingMode below
+    }
+  }
+
   useEffect(() => {
     if (completed) return;
 
     const html5Qrcode = new Html5Qrcode(SCANNER_ID);
     scannerInstanceRef.current = html5Qrcode;
+    let cancelled = false;
 
-    html5Qrcode
-      .start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decodedText) => {
-          handleDetected(decodedText);
-        },
-        () => {
-          /* ignore per-frame decode errors */
-        }
-      )
-      .catch(() => {
-        showFlash("Couldn't access the camera. Check camera permissions for this site.", "error");
-      });
+    (async () => {
+      const cameraId = await pickBestCamera();
+      if (cancelled) return;
+      html5Qrcode
+        .start(
+          cameraId || { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          (decodedText) => {
+            handleDetected(decodedText);
+          },
+          () => {
+            /* ignore per-frame decode errors */
+          }
+        )
+        .catch(() => {
+          showFlash("Couldn't access the camera. Check camera permissions for this site.", "error");
+        });
+    })();
 
     return () => {
+      cancelled = true;
       stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

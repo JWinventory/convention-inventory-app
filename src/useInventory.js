@@ -307,6 +307,19 @@ export function useInventory() {
     }
   }, []);
 
+  // Permanently removes an order from history. Unlike cancelling, this
+  // can't be undone — used for clearing out test orders or genuine
+  // mistakes from the permanent record.
+  const deleteOrder = useCallback(async (orderId) => {
+    setSyncStatus("yellow");
+    try {
+      await deleteDoc(doc(db, ORDERS_COL, orderId));
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
+    }
+  }, []);
+
   const saveNotes = useCallback(async (text) => {
     setSyncStatus("yellow");
     try {
@@ -416,6 +429,7 @@ export function useInventory() {
     deleteDraft,
     updateOrderStatus,
     updateOrder,
+    deleteOrder,
     saveNotes,
     addVolunteer,
     updateVolunteer,

@@ -221,30 +221,31 @@ export default function App() {
 
   async function handleOrderCreated(order) {
     const id = await addOrder(order);
-    if (id) {
-      localStorage.setItem(MY_ORDER_KEY, id);
-      setMyOrderId(id);
-      if (myDraftId) {
-        deleteDraft(myDraftId);
-        localStorage.removeItem(MY_DRAFT_KEY);
-        setMyDraftId(null);
-      }
-      const reviewerVolunteer = volunteers.find((v) => v.id === reviewerId);
-      try {
-        await fetch("/api/notify-review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            reviewerEmail: reviewerVolunteer?.email || "",
-            requester: { name: order.requester.name, phone: order.requester.phone },
-            eventType: order.requester.eventType,
-            eventDate: order.requester.eventDate,
-            items: order.items,
-          }),
-        });
-      } catch (err) {
-        // Order is already saved even if the review-alert email fails to send.
-      }
+    if (!id) {
+      throw new Error("Could not create the order.");
+    }
+    localStorage.setItem(MY_ORDER_KEY, id);
+    setMyOrderId(id);
+    if (myDraftId) {
+      deleteDraft(myDraftId);
+      localStorage.removeItem(MY_DRAFT_KEY);
+      setMyDraftId(null);
+    }
+    const reviewerVolunteer = volunteers.find((v) => v.id === reviewerId);
+    try {
+      await fetch("/api/notify-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewerEmail: reviewerVolunteer?.email || "",
+          requester: { name: order.requester.name, phone: order.requester.phone },
+          eventType: order.requester.eventType,
+          eventDate: order.requester.eventDate,
+          items: order.items,
+        }),
+      });
+    } catch (err) {
+      // Order is already saved even if the review-alert email fails to send.
     }
   }
 

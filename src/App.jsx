@@ -100,6 +100,7 @@ export default function App() {
     deleteDraft,
     updateOrderStatus,
     updateOrder,
+    deleteOrder,
     saveNotes,
     addVolunteer,
     updateVolunteer,
@@ -355,6 +356,20 @@ export default function App() {
     await deleteDraft(draft.id);
   }
 
+  // Permanently deletes an order from history. Unlike cancelling, this
+  // can't be undone, so it's confirmed explicitly.
+  async function handleDeleteOrder(order) {
+    const requesterLabel = order.requesterName || "this requester";
+    if (
+      !window.confirm(
+        `Permanently delete this order for ${requesterLabel}? This can't be undone — it will be removed from history entirely, not just archived.`
+      )
+    ) {
+      return;
+    }
+    await deleteOrder(order.id);
+  }
+
   if (!firebaseConfigured) {
     return (
       <div style={S.page}>
@@ -412,6 +427,7 @@ export default function App() {
             onMarkReady={handleMarkOrderReady}
             onCancelOrder={handleCancelOrder}
             onCancelDraft={handleCancelDraft}
+            onDeleteOrder={handleDeleteOrder}
             volunteers={volunteers}
             volunteersReady={volunteersReady}
             reviewerId={reviewerId}

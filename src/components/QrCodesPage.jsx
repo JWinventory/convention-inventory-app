@@ -603,10 +603,9 @@ export function QrCodesPage({ items, updateItem }) {
           .screen-hide-print-show { display: block; }
           /* Every printed QR code (any print action) comes out a
              consistent, fixed 2x2in card — same footprint as the text
-             stickers below. The canvas shrinks to fit whatever room is
-             left after the brand header and label text, landing around
-             1.4-1.5in of actual code, comfortably scannable with room
-             to spare. */
+             stickers below. Header and label text are sized as large as
+             they can go while still leaving the canvas a reliably
+             scannable ~1.25in, with room to spare over the ~1in floor. */
           .qr-print-card {
             page-break-inside: avoid;
             box-shadow: none !important;
@@ -620,21 +619,21 @@ export function QrCodesPage({ items, updateItem }) {
             align-items: center;
             justify-content: center;
             margin: 0 auto;
-            padding: 0.08in !important;
+            padding: 0.07in !important;
           }
           .qr-print-card canvas {
             width: auto !important;
             height: auto !important;
-            max-width: 1.3in !important;
-            max-height: 1.3in !important;
+            max-width: 1.25in !important;
+            max-height: 1.25in !important;
           }
           .qr-brand-header {
-            font-size: 11px !important;
-            margin-bottom: 2px !important;
+            font-size: 16px !important;
+            margin-bottom: 3px !important;
           }
           .qr-code-label {
-            font-size: 9px !important;
-            margin-top: 3px !important;
+            font-size: 14px !important;
+            margin-top: 4px !important;
             line-height: 1.2 !important;
           }
           .sticker-print-card {

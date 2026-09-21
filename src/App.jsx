@@ -36,7 +36,7 @@ function computeLineItems(order, items) {
   return (order.items || []).map((li) => {
     const liveItem = items.find((i) => i.name === li.name);
     const stillOut = liveItem ? Math.min(li.qty, liveItem.out || 0) : 0;
-    return { ...li, stillOut, exists: Boolean(liveItem) };
+    return { ...li, stillOut, exists: Boolean(liveItem), category: liveItem ? liveItem.category : "Uncategorized" };
   });
 }
 
@@ -523,9 +523,11 @@ export default function App() {
 
       {checkInScanOpen && myOrder && (
         <CheckInScanModal
+          order={myOrder}
           lineItems={myLineItems}
           items={items}
           onResolveAction={(id, delta, note) => applyCheckChange(id, delta, requester.name, note)}
+          onUpdateOrder={updateOrder}
           onClose={() => setCheckInScanOpen(false)}
         />
       )}

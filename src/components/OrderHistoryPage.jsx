@@ -3,10 +3,18 @@ import { S } from "../styles";
 
 // Every order that's been fully checked back in lands here permanently
 // — it's off the Orders page so that list stays focused on what's
-// actually in progress, but nothing is ever deleted, so past requests
-// can always be looked up.
-export function OrderHistoryPage({ orders, items }) {
+// actually in progress, but nothing is deleted automatically, so past
+// requests can always be looked up. Deleting one here is permanent and
+// restricted to the designated Reviewer or a full admin, same as
+// cancelling an order.
+export function OrderHistoryPage({ orders, items, volunteers, reviewerId, currentVolunteerName, isCurrentVolunteerAdmin, onDeleteOrder }) {
   const [search, setSearch] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
+
+  const reviewer = (volunteers || []).find((v) => v.id === reviewerId) || null;
+  const reviewerName = reviewer?.name || "";
+  const isReviewer = Boolean(reviewerName) && currentVolunteerName === reviewerName;
+  const canDelete = isReviewer || Boolean(isCurrentVolunteerAdmin);
 
   const completedOrders = useMemo(() => {
     return orders
@@ -96,6 +104,28 @@ export function OrderHistoryPage({ orders, items }) {
                 <strong>Notes:</strong> {order.notes}
               </div>
             )}
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", textAlign: "right" }}>
+              {canDelete ? (
+                <button
+                  style={deleteLinkStyle}
+                  disabled={deletingId === order.id}
+                  onClick={async () => {
+                    setDeletingId(order.id);
+                    try {
+                      await onDeleteOrder(order);
+                    } finally {
+                      setDeletingId(null);
+                    }
+                  }}
+                >
+                  {deletingId === order.id ? "Deleting…" : "Delete Permanently"}
+                </button>
+              ) : (
+                <span style={{ ...S.tinyMuted, fontSize: 11 }}>
+                  Only the reviewer or an admin can delete this.
+                </span>
+              )}
+            </div>
           </div>
         ))
       )}
@@ -112,4 +142,14 @@ const cancelledTagStyle = {
   padding: "2px 8px",
   textTransform: "uppercase",
   letterSpacing: 0.3,
+};
+
+const deleteLinkStyle = {
+  background: "none",
+  border: "none",
+  color: "#c0392b",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+  padding: 0,
 };

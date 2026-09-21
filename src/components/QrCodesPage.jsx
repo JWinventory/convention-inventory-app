@@ -497,7 +497,7 @@ export function QrCodesPage({ items, updateItem }) {
 
                   return (
                     <div key={item.id} className="accordion-item" data-item-id={item.id} style={accordionItemStyle}>
-                      <div style={accordionHeaderStyle}>
+                      <div className="no-print" style={accordionHeaderStyle}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <input
                             className="no-print"
@@ -586,6 +586,20 @@ export function QrCodesPage({ items, updateItem }) {
           .accordion-item:has(.qr-print-card.qr-print-only) .accordion-body {
             display: block !important;
           }
+          .qr-print-grid {
+            gap: 0.1in !important;
+            margin-top: 0 !important;
+          }
+          .accordion-item {
+            border-bottom: none !important;
+            margin-bottom: 0 !important;
+          }
+          .accordion-body {
+            padding-bottom: 0.1in !important;
+          }
+          .qr-dept-section {
+            margin-top: 0 !important;
+          }
           .screen-hide-print-show { display: block; }
           /* Every printed QR code (any print action) comes out a
              consistent, fixed 2x2in card — same footprint as the text
@@ -660,8 +674,8 @@ export function QrCodesPage({ items, updateItem }) {
           .qr-print-grid-dense {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(2in, 1fr));
-            gap: 0.2in;
-            margin-bottom: 14px;
+            gap: 0.1in;
+            margin-bottom: 0.1in;
             justify-items: center;
           }
         }

@@ -16,7 +16,7 @@ export function OrderHistoryPage({ orders, items }) {
           const stillOut = liveItem ? Math.min(li.qty, liveItem.out || 0) : 0;
           return { ...li, stillOut, exists: Boolean(liveItem) };
         });
-        const isActive = lineItems.some((li) => li.stillOut > 0);
+        const isActive = order.status !== "cancelled" && lineItems.some((li) => li.stillOut > 0);
         return {
           ...order,
           lineItems,

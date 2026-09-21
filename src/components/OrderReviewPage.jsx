@@ -19,24 +19,6 @@ export function OrderReviewPage({ requester, checkedOutItems, email, setEmail, n
     setStatus("sending");
     setErrorMsg("");
     try {
-      const res = await fetch("/api/notify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requesterEmail: email,
-          requester,
-          items: checkedOutItems.map((it) => ({ name: it.name, out: it.out })),
-          notes,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setErrorMsg(data.error || "Something went wrong sending the notification.");
-        setStatus("error");
-        return;
-      }
-
       if (onOrderCreated) {
         await onOrderCreated({
           requester,
@@ -48,7 +30,7 @@ export function OrderReviewPage({ requester, checkedOutItems, email, setEmail, n
       // On success, the parent screen switches away to order tracking
       // automatically once the new order id is set — nothing more to do here.
     } catch (err) {
-      setErrorMsg("Couldn't reach the notification service. Check your connection and try again.");
+      setErrorMsg("Couldn't submit the order. Check your connection and try again.");
       setStatus("error");
     }
   }

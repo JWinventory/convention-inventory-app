@@ -39,7 +39,7 @@ export function OrdersPage({
         const stillOut = liveItem ? Math.min(li.qty, liveItem.out || 0) : 0;
         return { ...li, stillOut, exists: Boolean(liveItem) };
       });
-      const isActive = lineItems.some((li) => li.stillOut > 0);
+      const isActive = order.status !== "cancelled" && lineItems.some((li) => li.stillOut > 0);
       const status = order.status || "submitted";
       const reviewedBy = Array.isArray(order.reviewedBy) ? order.reviewedBy : [];
       const assignedFillers = Array.isArray(order.assignedFillers) ? order.assignedFillers : [];

@@ -27,6 +27,7 @@ export function AdminHub({
   onMarkReady,
   onCancelOrder,
   onCancelDraft,
+  onDeleteOrder,
   volunteers,
   volunteersReady,
   reviewerId,
@@ -141,7 +142,17 @@ export function AdminHub({
           onUpdateOrder={onUpdateOrder}
         />
       )}
-      {activeSection === "history" && <OrderHistoryPage orders={orders} items={items} />}
+      {activeSection === "history" && (
+        <OrderHistoryPage
+          orders={orders}
+          items={items}
+          volunteers={volunteers}
+          reviewerId={reviewerId}
+          currentVolunteerName={currentVolunteer.name}
+          isCurrentVolunteerAdmin={Boolean(currentVolunteer.permissions?.volunteers)}
+          onDeleteOrder={onDeleteOrder}
+        />
+      )}
       {activeSection === "qrcodes" && <QrCodesPage items={items} updateItem={updateItem} />}
       {activeSection === "emergency" && <EmergencyChecklistPage items={items} orders={orders} />}
       {activeSection === "volunteers" && (

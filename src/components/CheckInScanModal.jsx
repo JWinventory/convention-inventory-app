@@ -5,17 +5,21 @@ import { Icon } from "./Icon";
 import { S } from "../styles";
 
 const SCANNER_ID = "checkin-camera-region";
+const PENDING_TIMEOUT_MS = 1200; // how long a detected code stays "in focus" without a fresh sighting
 
-// A streamlined, check-in-only scanner for Phase 3: scan an item's QR
-// code and it's checked in automatically — no buttons, no confirmation
-// — and the camera keeps running so the next item can be scanned right
-// away, without ever needing to pick a camera again. A "Missing QR
-// Code?" option lets an item be checked in manually when its code is
-// damaged or missing, but requires a short note before it'll proceed.
-// Once everything's checked in, the camera stops and a completion
-// screen takes over until the requester chooses to leave.
+// A check-in scanner for Phase 3: point the camera at an item's QR code,
+// and once it's in focus, tap Capture to check it in. A live summary up
+// top shows how many of the total units are checked in and which
+// specific items are still outstanding, so it's obvious at a glance
+// what's left to collect rather than needing to scan the whole list. A
+// "Missing QR Code?" option lets an item be checked in manually when
+// its code is damaged or missing, but requires a short note before
+// it'll proceed. Once everything's checked in, the camera stops and a
+// completion screen takes over until the requester chooses to leave.
 export function CheckInScanModal({ lineItems, items, onResolveAction, onClose }) {
   const [flash, setFlash] = useState(null); // { text, tone: "ok" | "error" } | null
+  const [pendingScan, setPendingScan] = useState(null); // { code, name } | null — currently in focus, awaiting capture
+  const [capturing, setCapturing] = useState(false);
   const [missingOpen, setMissingOpen] = useState(false);
   const [missingItemName, setMissingItemName] = useState("");
   const [missingNote, setMissingNote] = useState("");
@@ -25,7 +29,8 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   const lineItemsRef = useRef(lineItems);
   const itemsRef = useRef(items);
   const onResolveActionRef = useRef(onResolveAction);
-  const lastScanRef = useRef({ code: null, at: 0 });
+  const lastCapturedRef = useRef({ code: null, at: 0 });
+  const pendingLastSeenRef = useRef(0);
   const scannerInstanceRef = useRef(null);
 
   useEffect(() => {
@@ -36,6 +41,22 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
 
   const remaining = lineItems.filter((li) => li.stillOut > 0);
   const allDone = lineItems.length > 0 && remaining.length === 0;
+  const totalUnits = lineItems.reduce((sum, li) => sum + li.qty, 0);
+  const checkedInUnits = totalUnits - remaining.reduce((sum, li) => sum + li.stillOut, 0);
+
+  // A detected code stops counting as "in focus" if it hasn't been seen
+  // again in the last PENDING_TIMEOUT_MS — covers the case where it's
+  // moved out of frame without a distinct "lost tracking" event from
+  // the scanner library to tell us so directly.
+  useEffect(() => {
+    if (!pendingScan) return;
+    const interval = setInterval(() => {
+      if (Date.now() - pendingLastSeenRef.current > PENDING_TIMEOUT_MS) {
+        setPendingScan(null);
+      }
+    }, 250);
+    return () => clearInterval(interval);
+  }, [pendingScan]);
 
   // Fully stops and tears down the camera before returning. Pulls the
   // instance out of the ref FIRST so it's safe to call this more than
@@ -82,49 +103,70 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
     setTimeout(() => setFlash((f) => (f && f.text === text ? null : f)), 1400);
   }
 
-  async function handleDecoded(decodedText) {
+  // Called continuously by the scanner for every successful decode —
+  // just tracks what's currently in focus. Nothing is checked in until
+  // the volunteer taps Capture.
+  function handleDetected(decodedText) {
     const trimmed = decodedText.trim();
-    let payload;
-    try {
-      payload = JSON.parse(trimmed);
-    } catch (e) {
-      showFlash("That QR code isn't recognized.", "error");
-      return;
-    }
+    pendingLastSeenRef.current = Date.now();
+    setPendingScan((prev) => {
+      if (prev && prev.code === trimmed) return prev;
+      let name = null;
+      try {
+        const payload = JSON.parse(trimmed);
+        name = payload.name || null;
+      } catch (e) {
+        // leave name null — shown as an unrecognized code below
+      }
+      return { code: trimmed, name };
+    });
+  }
 
-    const name = payload.name;
+  async function handleCapture() {
+    if (!pendingScan || capturing) return;
+    const { code: trimmed, name } = pendingScan;
     const now = Date.now();
 
-    // Debounce by the exact code (not just the item name) — items with a
-    // separate QR code per unit share the same name, so keying on the
-    // full code lets distinct physical units be scanned back-to-back
-    // without one blocking the next.
-    if (lastScanRef.current.code === trimmed && now - lastScanRef.current.at < 2500) {
-      return; // debounce repeat reads of the same physical code while it's still in frame
+    // Guards against a double-tap, or the same code still sitting in
+    // frame, capturing the same physical unit twice in a row.
+    if (lastCapturedRef.current.code === trimmed && now - lastCapturedRef.current.at < 2500) {
+      return;
     }
-    lastScanRef.current = { code: trimmed, at: now };
+    lastCapturedRef.current = { code: trimmed, at: now };
+
+    if (!name) {
+      showFlash("That QR code isn't recognized.", "error");
+      setPendingScan(null);
+      return;
+    }
 
     const li = lineItemsRef.current.find((l) => l.name === name);
     if (!li) {
       showFlash("That item isn't part of this order.", "error");
+      setPendingScan(null);
       return;
     }
     if (li.stillOut <= 0) {
       showFlash(`${name} is already checked in.`, "ok");
+      setPendingScan(null);
       return;
     }
-
     const liveItem = itemsRef.current.find((i) => i.name === name);
     if (!liveItem) {
       showFlash("That item couldn't be found in the catalog.", "error");
+      setPendingScan(null);
       return;
     }
 
+    setCapturing(true);
     try {
       await onResolveActionRef.current(liveItem.id, -1);
       showFlash(`Checked in: ${name}`, "ok");
     } catch (e) {
       showFlash("Couldn't check that item in — try again.", "error");
+    } finally {
+      setCapturing(false);
+      setPendingScan(null);
     }
   }
 
@@ -139,7 +181,7 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 220, height: 220 } },
         (decodedText) => {
-          handleDecoded(decodedText);
+          handleDetected(decodedText);
         },
         () => {
           /* ignore per-frame decode errors */
@@ -175,14 +217,14 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
 
   if (completed) {
     return (
-      <Modal onClose={onClose} title="Check-In Complete">
+      <Modal onClose={onClose} title="Scanning Complete">
         <div style={S.successBox}>
           <div style={S.successCheck}>
             <Icon.check size={28} />
           </div>
-          <div style={S.successTitle}>See you at the next event!</div>
+          <div style={S.successTitle}>Thanks for returning all of the items!</div>
           <div style={{ fontWeight: 700, color: "#1a1a2e", marginBottom: 10 }}>CEPC-Lubbock</div>
-          <div style={S.tinyMuted}>All your items have been checked in. You may now close this window.</div>
+          <div style={S.tinyMuted}>Everything has been checked in. You can now close this screen.</div>
           <button style={{ ...S.primaryBtn, marginTop: 16 }} onClick={onClose}>
             Return to Inventory Screen
           </button>
@@ -194,10 +236,21 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
   return (
     <Modal onClose={onClose} title="Scan to Check In">
       {!missingOpen && (
-        <p style={S.modalHint}>
-          Point the camera at each item's QR code — it checks in automatically and moves on to the next
-          one, no need to tap anything.
-        </p>
+        <>
+          <p style={S.modalHint}>
+            Point the camera at an item's QR code, then tap Capture once it's in focus.
+          </p>
+          <div style={{ ...S.card, padding: "10px 12px", marginBottom: 10 }}>
+            <div style={{ fontWeight: 700, color: "#1a1a2e" }}>
+              {checkedInUnits} of {totalUnits} checked in
+            </div>
+            {remaining.length > 0 && (
+              <div style={{ ...S.tinyMuted, marginTop: 4 }}>
+                Still needed: {remaining.map((li) => `${li.name} (${li.stillOut})`).join(", ")}
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* The camera view stays mounted the whole time (just hidden while the
@@ -227,7 +280,27 @@ export function CheckInScanModal({ lineItems, items, onResolveAction, onClose })
 
       {!missingOpen && (
         <>
-          <div style={{ ...S.summaryListWrap, marginTop: 12 }}>
+          <div style={{ textAlign: "center", margin: "10px 0" }}>
+            <div style={{ ...S.tinyMuted, marginBottom: 6, minHeight: 16 }}>
+              {pendingScan
+                ? pendingScan.name
+                  ? `In focus: ${pendingScan.name}`
+                  : "Unrecognized code in focus"
+                : "Point the camera at a QR code…"}
+            </div>
+            <button
+              style={{
+                ...S.primaryBtn,
+                ...(!pendingScan || capturing ? S.btnDisabled : {}),
+              }}
+              disabled={!pendingScan || capturing}
+              onClick={handleCapture}
+            >
+              {capturing ? "Checking In…" : "Capture"}
+            </button>
+          </div>
+
+          <div style={{ ...S.summaryListWrap, marginTop: 4 }}>
             {lineItems.map((li, idx) => (
               <div key={idx} style={S.summaryRow}>
                 <span>{li.name}</span>

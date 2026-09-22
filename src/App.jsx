@@ -589,8 +589,15 @@ export default function App() {
                 <ItemCard
                   key={item.id}
                   item={item}
+                  selectedQty={selections[item.id] || 0}
                   onCheckOut={(qty) =>
-                    setSelections((prev) => ({ ...prev, [item.id]: (prev[item.id] || 0) + qty }))
+                    setSelections((prev) => {
+                      const current = prev[item.id] || 0;
+                      // Never let repeated clicks push the total past what's
+                      // actually on hand for this item.
+                      const capped = Math.min(current + qty, item.total);
+                      return { ...prev, [item.id]: capped };
+                    })
                   }
                   onShowQr={() => setQrItem(item)}
                 />

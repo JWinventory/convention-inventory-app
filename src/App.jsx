@@ -6,6 +6,7 @@ import { ItemCard } from "./components/ItemCard";
 import { NotesSection } from "./components/NotesSection";
 import { CheckInScanModal } from "./components/CheckInScanModal";
 import { QrModal } from "./components/QrModal";
+import { Modal } from "./components/Modal";
 import { OrderReviewPage } from "./components/OrderReviewPage";
 import { MyOrderStatus } from "./components/MyOrderStatus";
 import { FindOrderForm } from "./components/FindOrderForm";
@@ -150,6 +151,7 @@ export default function App() {
   const [submitNotes, setSubmitNotes] = useState("");
   const [noteDraft, setNoteDraft] = useState(notes);
   const [noteFlash, setNoteFlash] = useState(false);
+  const [saveConfirm, setSaveConfirm] = useState(null); // { phone } | null — brief confirmation after Save
 
   // Measures the sticky header's actual rendered height, so the search
   // bar / category tabs below it can stick at exactly that offset
@@ -230,6 +232,33 @@ export default function App() {
     });
   }
 
+  // Checkpoints the current picks as a draft. Resets the whole form
+  // right after — items and requester details both — so there's no
+  // ambiguity about whether it actually saved: an empty, ready-for-the-
+  // next-request screen IS the confirmation, backed up by an explicit
+  // "Saved!" message. To keep adding to this same draft, or to finish
+  // and submit it, they come back via "Already submitted an order?"
+  // with their phone number.
+  async function handleSaveDraft() {
+    const draftItems = checkedOutItems.map((it) => ({ name: it.name, qty: it.out }));
+    const savedPhone = requester.phone;
+    const id = await saveDraft(myDraftId, requester, submitEmail, submitNotes, draftItems);
+    if (id && !myDraftId) {
+      localStorage.setItem(MY_DRAFT_KEY, id);
+    }
+    setSelections({});
+    setRequester(defaultRequester());
+    setSubmitEmail("");
+    setSubmitNotes("");
+    // Forget which draft this was too — otherwise picking new items
+    // and saving again (without looking the draft back up first) would
+    // silently overwrite its just-saved contact info with these now-
+    // blank fields.
+    localStorage.removeItem(MY_DRAFT_KEY);
+    setMyDraftId(null);
+    setSaveConfirm({ phone: savedPhone });
+  }
+
   // --- Phase 1-3 order tracking (this browser's own submitted order) ---
   const myOrder = useMemo(() => orders.find((o) => o.id === myOrderId) || null, [orders, myOrderId]);
   const myLineItems = useMemo(() => (myOrder ? computeLineItems(myOrder, items) : []), [myOrder, items]);
@@ -263,7 +292,14 @@ export default function App() {
     }
     localStorage.setItem(MY_ORDER_KEY, id);
     setMyOrderId(id);
-    setSelections({}); // clear the static form now that it's been submitted
+    // Once a request is submitted, the whole form starts fresh — even
+    // returning to this same device later shouldn't carry over the old
+    // requester details or item picks, matching the "blank slate for
+    // every visit" approach used everywhere else on this screen.
+    setSelections({});
+    setRequester(defaultRequester());
+    setSubmitEmail("");
+    setSubmitNotes("");
     if (myDraftId) {
       deleteDraft(myDraftId);
       localStorage.removeItem(MY_DRAFT_KEY);
@@ -610,22 +646,37 @@ export default function App() {
       </main>
 
       {tab === "inventory" && myOrderPhase === "none" && !reviewOpen && (
-        <button
-          style={S.fabSubmit}
-          onClick={async () => {
-            const draftItems = checkedOutItems.map((it) => ({ name: it.name, qty: it.out }));
-            const id = await saveDraft(myDraftId, requester, submitEmail, submitNotes, draftItems);
-            if (id && !myDraftId) {
-              localStorage.setItem(MY_DRAFT_KEY, id);
-              setMyDraftId(id);
-            }
-            setReviewOpen(true);
-          }}
-        >
-          <Icon.bell />
-          <span>Save</span>
-          {checkedOutItems.length > 0 && <span style={S.fabBadge}>{checkedOutItems.length}</span>}
-        </button>
+        <div style={{ position: "fixed", right: 16, bottom: 16, zIndex: 50, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+          {checkedOutItems.length > 0 && (
+            <button style={S.secondaryBtn} onClick={() => setReviewOpen(true)}>
+              Review &amp; Submit
+            </button>
+          )}
+          <button style={S.fabSubmit} onClick={handleSaveDraft}>
+            <Icon.bell />
+            <span>Save</span>
+            {checkedOutItems.length > 0 && <span style={S.fabBadge}>{checkedOutItems.length}</span>}
+          </button>
+        </div>
+      )}
+
+      {saveConfirm && (
+        <Modal onClose={() => setSaveConfirm(null)} title="Saved">
+          <div style={S.successBox}>
+            <div style={S.successCheck}>
+              <Icon.check size={28} />
+            </div>
+            <div style={S.successTitle}>Saved!</div>
+            <div style={S.tinyMuted}>
+              Your progress is safely saved. Come back anytime and use "Already submitted an order?" with{" "}
+              {saveConfirm.phone ? <strong>{saveConfirm.phone}</strong> : "your phone number"} to pick up right
+              where you left off.
+            </div>
+            <button style={{ ...S.primaryBtn, marginTop: 16 }} onClick={() => setSaveConfirm(null)}>
+              Okay
+            </button>
+          </div>
+        </Modal>
       )}
 
       {checkInScanOpen && myOrder && (

@@ -393,6 +393,10 @@ export default function App() {
       }
       setSelections(restored);
 
+      // Straight to Review & Submit — resuming a draft means they're
+      // here to finish it, not to browse from scratch.
+      setReviewOpen(true);
+
       return true;
     }
 

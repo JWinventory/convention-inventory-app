@@ -140,7 +140,7 @@ export function OrdersPage({
         <EditOrderModal
           order={editingOrder}
           items={items}
-          onSave={(newItems) => onUpdateOrderItems(editingOrder, newItems)}
+          onSave={(newItems, newDetails) => onUpdateOrderItems(editingOrder, newItems, newDetails)}
           onClose={() => setEditingOrder(null)}
         />
       )}
@@ -151,7 +151,7 @@ export function OrdersPage({
           items={items}
           title={`Edit Draft — ${editingDraft.requesterName || "Requester"}`}
           hint="Adjust quantities, remove items, or add ones the requester hasn't picked yet. Nothing here touches live inventory — a draft doesn't reserve any stock until it's actually submitted."
-          onSave={(newItems) => onUpdateDraftItems(editingDraft, newItems)}
+          onSave={(newItems, newDetails) => onUpdateDraftItems(editingDraft, newItems, newDetails)}
           onClose={() => setEditingDraft(null)}
         />
       )}

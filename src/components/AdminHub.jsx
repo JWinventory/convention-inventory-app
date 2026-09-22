@@ -28,6 +28,7 @@ export function AdminHub({
   onCancelOrder,
   onUpdateOrderItems,
   onCancelDraft,
+  onUpdateDraftItems,
   onDeleteOrder,
   volunteers,
   volunteersReady,
@@ -137,6 +138,7 @@ export function AdminHub({
           onCancelOrder={onCancelOrder}
           onUpdateOrderItems={onUpdateOrderItems}
           onCancelDraft={onCancelDraft}
+          onUpdateDraftItems={onUpdateDraftItems}
           volunteers={volunteers}
           reviewerId={reviewerId}
           currentVolunteerName={currentVolunteer.name}

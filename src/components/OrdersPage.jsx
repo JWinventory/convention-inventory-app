@@ -15,6 +15,7 @@ export function OrdersPage({
   onMarkReady,
   onCancelOrder,
   onCancelDraft,
+  onUpdateDraftItems,
   onUpdateOrderItems,
   volunteers,
   reviewerId,
@@ -24,6 +25,7 @@ export function OrdersPage({
 }) {
   const [search, setSearch] = useState("");
   const [editingOrder, setEditingOrder] = useState(null);
+  const [editingDraft, setEditingDraft] = useState(null);
 
   const reviewer = volunteers.find((v) => v.id === reviewerId) || null;
   const reviewerName = reviewer?.name || "";
@@ -119,11 +121,17 @@ export function OrdersPage({
         <>
           <h3 style={{ ...S.cardTitle, marginTop: 18 }}>In-Progress, Not Yet Submitted ({drafts.length})</h3>
           <div style={{ ...S.tinyMuted, marginBottom: 10 }}>
-            Items aren't tied to a specific draft until it's submitted, so cancelling one releases everything
-            currently checked out that hasn't been submitted yet.
+            A requester saved these but hasn't submitted yet — nothing here has reserved any inventory. They
+            can resume and finish on any device using "Already submitted an order?" with their phone number.
           </div>
           {drafts.map((draft) => (
-            <DraftCard key={draft.id} draft={draft} canCancel={canCancel} onCancel={onCancelDraft} />
+            <DraftCard
+              key={draft.id}
+              draft={draft}
+              canCancel={canCancel}
+              onCancel={onCancelDraft}
+              onEditDraft={setEditingDraft}
+            />
           ))}
         </>
       )}
@@ -134,6 +142,17 @@ export function OrdersPage({
           items={items}
           onSave={(newItems) => onUpdateOrderItems(editingOrder, newItems)}
           onClose={() => setEditingOrder(null)}
+        />
+      )}
+
+      {editingDraft && (
+        <EditOrderModal
+          order={editingDraft}
+          items={items}
+          title={`Edit Draft — ${editingDraft.requesterName || "Requester"}`}
+          hint="Adjust quantities, remove items, or add ones the requester hasn't picked yet. Nothing here touches live inventory — a draft doesn't reserve any stock until it's actually submitted."
+          onSave={(newItems) => onUpdateDraftItems(editingDraft, newItems)}
+          onClose={() => setEditingDraft(null)}
         />
       )}
     </div>
@@ -301,7 +320,7 @@ function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, 
   );
 }
 
-function DraftCard({ draft, canCancel, onCancel }) {
+function DraftCard({ draft, canCancel, onCancel, onEditDraft }) {
   const [cancelling, setCancelling] = useState(false);
 
   async function handleCancel() {
@@ -331,7 +350,23 @@ function DraftCard({ draft, canCancel, onCancel }) {
           <strong>Notes:</strong> {draft.notes}
         </div>
       )}
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", textAlign: "right" }}>
+
+      <div style={{ ...S.summaryListWrap, marginTop: 10 }}>
+        {(!draft.items || draft.items.length === 0) && (
+          <div style={S.tinyMuted}>No items picked yet.</div>
+        )}
+        {(draft.items || []).map((li, idx) => (
+          <div key={idx} style={S.summaryRow}>
+            <span>{li.name}</span>
+            <span style={S.summaryQty}>×{li.qty}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <button style={editLinkStyle} onClick={() => onEditDraft(draft)}>
+          Edit Items
+        </button>
         {canCancel ? (
           <button style={cancelLinkStyle} disabled={cancelling} onClick={handleCancel}>
             {cancelling ? "Cancelling…" : "Cancel This Draft"}

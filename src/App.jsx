@@ -335,6 +335,31 @@ export default function App() {
     } catch (err) {
       // Order is already saved even if the review-alert email fails to send.
     }
+
+    // Confirms to the requester (and the returner, if one was named)
+    // that the request went through — separate from the reviewer alert
+    // above, and just as non-blocking if it fails to send.
+    try {
+      await fetch("/api/notify-submitted", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requesterEmail: order.requesterEmail || "",
+          returnerEmail: order.requester.hasReturner ? order.requester.returnerEmail : "",
+          requester: { name: order.requester.name, phone: order.requester.phone },
+          returner: order.requester.hasReturner
+            ? { name: order.requester.returnerName, phone: order.requester.returnerPhone }
+            : null,
+          eventType: order.requester.eventType,
+          eventDate: order.requester.eventDate,
+          pickupDate: order.requester.pickupDate,
+          returnDate: order.requester.returnDate,
+          items: order.items,
+        }),
+      });
+    } catch (err) {
+      // Order is already saved even if this confirmation email fails to send.
+    }
   }
 
   // Cross-device lookup: finds either a submitted order (to pick up

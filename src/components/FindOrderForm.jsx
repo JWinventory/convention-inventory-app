@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { S } from "../styles";
 
-// A collapsed link that expands into a small lookup form, so a
-// requester can pick up their in-progress order on a different device
-// than the one they originally submitted from.
+// A collapsed, prominent call-to-action that expands into a small
+// lookup form — lets a requester pick up an in-progress draft to keep
+// adding items and submit, or jump straight to check-in scanning once
+// their order is ready for pickup, all by phone number or email.
 export function FindOrderForm({ onFind }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -18,8 +19,8 @@ export function FindOrderForm({ onFind }) {
   if (!open) {
     return (
       <div style={{ textAlign: "center", margin: "4px 0 16px" }}>
-        <button style={S.editBtn} onClick={() => setOpen(true)}>
-          Already submitted an order?
+        <button style={findOrderCtaStyle} onClick={() => setOpen(true)}>
+          Already started or submitted an order? Click Here
         </button>
       </div>
     );
@@ -29,7 +30,9 @@ export function FindOrderForm({ onFind }) {
     <div style={S.card}>
       <h2 style={S.cardTitle}>Find My Request</h2>
       <p style={S.tinyMuted}>
-        Enter the phone number or email you used when you submitted your request, to pick it up on this device.
+        Enter the phone number or email used for the request. If it's still in progress, you'll come right
+        back to it to keep adding items and submit. If it's already been filled, you'll be taken to scan
+        items back in.
       </p>
       <form onSubmit={handleSubmit}>
         <label style={S.fieldLabel}>
@@ -60,3 +63,16 @@ export function FindOrderForm({ onFind }) {
     </div>
   );
 }
+
+const findOrderCtaStyle = {
+  background: "#0072CE",
+  color: "#fff",
+  border: "none",
+  borderRadius: 10,
+  padding: "16px 24px",
+  fontSize: 17,
+  fontWeight: 800,
+  width: "100%",
+  cursor: "pointer",
+  boxShadow: "0 2px 8px rgba(0,114,206,0.35)",
+};

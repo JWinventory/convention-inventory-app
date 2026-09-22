@@ -8,7 +8,7 @@ import { S } from "../styles";
 // and new quantities for each item and adjusts live inventory to
 // match: removing/reducing returns stock to available, adding/
 // increasing reserves more of it.
-export function EditOrderModal({ order, items, onSave, onClose }) {
+export function EditOrderModal({ order, items, title, hint, onSave, onClose }) {
   const [editItems, setEditItems] = useState(() => (order.items || []).map((li) => ({ ...li })));
   const [addItemName, setAddItemName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -45,11 +45,10 @@ export function EditOrderModal({ order, items, onSave, onClose }) {
   }
 
   return (
-    <Modal onClose={onClose} title={`Edit Order — ${order.requesterName || "Requester"}`}>
+    <Modal onClose={onClose} title={title || `Edit Order — ${order.requesterName || "Requester"}`}>
       <p style={S.modalHint}>
-        Adjust quantities, remove items, or add ones that weren't originally requested. Saving updates
-        live inventory to match — removing or reducing an item returns stock to available; adding or
-        increasing reserves more of it.
+        {hint ||
+          "Adjust quantities, remove items, or add ones that weren't originally requested. Saving updates live inventory to match — removing or reducing an item returns stock to available; adding or increasing reserves more of it."}
       </p>
 
       <div style={S.summaryListWrap}>

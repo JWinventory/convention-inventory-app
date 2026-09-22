@@ -229,6 +229,7 @@ export function useInventory() {
         returnerName: order.requester.returnerName || "",
         returnerPhone: order.requester.returnerPhone || "",
         returnerEmail: order.requester.returnerEmail || "",
+        returnerCircuit: order.requester.returnerCircuit || "",
         items: order.items, // [{ name, qty }]
         notes: order.notes || "",
         status: "submitted", // submitted -> reviewed -> assigned -> fulfilled (then "completed" is derived once items are checked back in)
@@ -265,6 +266,7 @@ export function useInventory() {
         returnerName: requester.returnerName || "",
         returnerPhone: requester.returnerPhone || "",
         returnerEmail: requester.returnerEmail || "",
+        returnerCircuit: requester.returnerCircuit || "",
         notes: notes || "",
         items: items || [],
         updatedAtMs: Date.now(),

@@ -296,14 +296,14 @@ export function useInventory() {
     }
   }, []);
 
-  // Lets staff add/remove items on a draft directly — a draft never
-  // reserves live inventory (that only happens once an order is
-  // actually submitted), so this is just a plain field update, no
-  // stock reconciliation needed.
-  const updateDraftItems = useCallback(async (draftId, newItems) => {
+  // Lets staff update a draft's items and/or its request details in one
+  // write — a draft never reserves live inventory (that only happens
+  // once an order is actually submitted), so this is just a plain
+  // field update, no stock reconciliation needed.
+  const updateDraftItems = useCallback(async (draftId, patch) => {
     setSyncStatus("yellow");
     try {
-      await updateDoc(doc(db, DRAFTS_COL, draftId), { items: newItems, updatedAtMs: Date.now() });
+      await updateDoc(doc(db, DRAFTS_COL, draftId), { ...patch, updatedAtMs: Date.now() });
       setSyncStatus("green");
     } catch (e) {
       setSyncStatus("red");

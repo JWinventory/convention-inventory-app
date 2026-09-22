@@ -22,11 +22,27 @@ const MY_DRAFT_KEY = "convention-inventory-my-draft-id";
 function loadRequester() {
   try {
     const raw = localStorage.getItem(REQUESTER_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return { ...defaultRequester(), ...JSON.parse(raw) };
   } catch (e) {
     /* ignore */
   }
-  return { name: "", phone: "", eventType: "", eventDate: "", pickupDate: "", returnDate: "" };
+  return defaultRequester();
+}
+
+function defaultRequester() {
+  return {
+    name: "",
+    phone: "",
+    eventType: "",
+    eventDate: "",
+    pickupDate: "",
+    returnDate: "",
+    circuit: "",
+    hasReturner: false,
+    returnerName: "",
+    returnerPhone: "",
+    returnerEmail: "",
+  };
 }
 
 // Matches each order line item up against the live catalog to see how
@@ -49,10 +65,12 @@ function findMyOrder(orders, items, query) {
   const qDigits = q.replace(/\D/g, "");
 
   const matches = orders.filter((o) => {
-    const phoneDigits = (o.requesterPhone || "").replace(/\D/g, "");
-    const email = (o.requesterEmail || "").toLowerCase();
-    const phoneMatch = qDigits.length >= 7 && phoneDigits === qDigits;
-    const emailMatch = q.includes("@") && email === q;
+    const requesterPhoneDigits = (o.requesterPhone || "").replace(/\D/g, "");
+    const returnerPhoneDigits = (o.returnerPhone || "").replace(/\D/g, "");
+    const requesterEmail = (o.requesterEmail || "").toLowerCase();
+    const returnerEmail = (o.returnerEmail || "").toLowerCase();
+    const phoneMatch = qDigits.length >= 7 && (requesterPhoneDigits === qDigits || returnerPhoneDigits === qDigits);
+    const emailMatch = q.includes("@") && (requesterEmail === q || returnerEmail === q);
     return phoneMatch || emailMatch;
   });
 
@@ -61,18 +79,22 @@ function findMyOrder(orders, items, query) {
 }
 
 // Finds the most recently-saved draft (in-progress, not yet submitted
-// order) whose phone or email matches the query. Drafts arrive already
-// sorted newest-first by the live query in useInventory.
+// order) whose phone or email matches the query — checking both the
+// requester's and the returner's contact info, so either one can pick
+// up the draft. Drafts arrive already sorted newest-first by the live
+// query in useInventory.
 function findMyDraft(drafts, query) {
   const q = query.trim().toLowerCase();
   if (!q) return null;
   const qDigits = q.replace(/\D/g, "");
 
   const matches = drafts.filter((d) => {
-    const phoneDigits = (d.requesterPhone || "").replace(/\D/g, "");
-    const email = (d.requesterEmail || "").toLowerCase();
-    const phoneMatch = qDigits.length >= 7 && phoneDigits === qDigits;
-    const emailMatch = q.includes("@") && email === q;
+    const requesterPhoneDigits = (d.requesterPhone || "").replace(/\D/g, "");
+    const returnerPhoneDigits = (d.returnerPhone || "").replace(/\D/g, "");
+    const requesterEmail = (d.requesterEmail || "").toLowerCase();
+    const returnerEmail = (d.returnerEmail || "").toLowerCase();
+    const phoneMatch = qDigits.length >= 7 && (requesterPhoneDigits === qDigits || returnerPhoneDigits === qDigits);
+    const emailMatch = q.includes("@") && (requesterEmail === q || returnerEmail === q);
     return phoneMatch || emailMatch;
   });
 
@@ -294,6 +316,11 @@ export default function App() {
         eventDate: found.eventDate || "",
         pickupDate: found.pickupDate || "",
         returnDate: found.returnDate || "",
+        circuit: found.circuit || "",
+        hasReturner: Boolean(found.hasReturner),
+        returnerName: found.returnerName || "",
+        returnerPhone: found.returnerPhone || "",
+        returnerEmail: found.returnerEmail || "",
       });
 
       return true;
@@ -311,6 +338,11 @@ export default function App() {
         eventDate: foundDraft.eventDate || "",
         pickupDate: foundDraft.pickupDate || "",
         returnDate: foundDraft.returnDate || "",
+        circuit: foundDraft.circuit || "",
+        hasReturner: Boolean(foundDraft.hasReturner),
+        returnerName: foundDraft.returnerName || "",
+        returnerPhone: foundDraft.returnerPhone || "",
+        returnerEmail: foundDraft.returnerEmail || "",
       });
       setSubmitEmail(foundDraft.requesterEmail || "");
       setSubmitNotes(foundDraft.notes || "");

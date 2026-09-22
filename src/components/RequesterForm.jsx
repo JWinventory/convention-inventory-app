@@ -3,6 +3,7 @@ import { S } from "../styles";
 import { Icon } from "./Icon";
 
 const CIRCUITS = ["TX 27-S", "TX 65-B", "TX 9", "TX 18"];
+const EVENT_TYPES = ["Circuit", "Regional", "Memorial"];
 
 export function RequesterForm({ requester, setRequester, locked, onSave, onEdit }) {
   function update(field, val) {
@@ -31,6 +32,22 @@ export function RequesterForm({ requester, setRequester, locked, onSave, onEdit 
       <div style={S.formGrid}>
         <Field label="Requester Name" value={requester.name} locked={locked} onChange={(v) => update("name", v)} placeholder="Full name" />
         <Field label="Cell Phone Number" value={requester.phone} locked={locked} onChange={(v) => update("phone", v)} placeholder="(555) 555-5555" />
+        <label style={S.fieldLabel}>
+          Event
+          <select
+            style={{ ...S.fieldInput, ...(locked ? S.fieldInputLocked : {}) }}
+            value={requester.eventType || ""}
+            disabled={locked}
+            onChange={(e) => update("eventType", e.target.value)}
+          >
+            <option value="">Select an event…</option>
+            {EVENT_TYPES.map((ev) => (
+              <option key={ev} value={ev}>
+                {ev}
+              </option>
+            ))}
+          </select>
+        </label>
         <label style={S.fieldLabel}>
           Circuit
           <select
@@ -63,29 +80,48 @@ export function RequesterForm({ requester, setRequester, locked, onSave, onEdit 
       </label>
 
       {requester.hasReturner && (
-        <div style={S.formGrid}>
-          <Field
-            label="Returner Name"
-            value={requester.returnerName || ""}
-            locked={locked}
-            onChange={(v) => update("returnerName", v)}
-            placeholder="Full name"
-          />
-          <Field
-            label="Returner Phone Number"
-            value={requester.returnerPhone || ""}
-            locked={locked}
-            onChange={(v) => update("returnerPhone", v)}
-            placeholder="(555) 555-5555"
-          />
-          <Field
-            label="Returner Email"
-            value={requester.returnerEmail || ""}
-            locked={locked}
-            onChange={(v) => update("returnerEmail", v)}
-            placeholder="name@example.com"
-            type="email"
-          />
+        <div style={{ marginTop: 10 }}>
+          <h3 style={{ ...S.cardTitle, fontSize: 15, marginBottom: 6 }}>Contact that will be returning the items</h3>
+          <div style={S.formGrid}>
+            <Field
+              label="Name"
+              value={requester.returnerName || ""}
+              locked={locked}
+              onChange={(v) => update("returnerName", v)}
+              placeholder="Full name"
+            />
+            <Field
+              label="Number"
+              value={requester.returnerPhone || ""}
+              locked={locked}
+              onChange={(v) => update("returnerPhone", v)}
+              placeholder="(555) 555-5555"
+            />
+            <Field
+              label="Email"
+              value={requester.returnerEmail || ""}
+              locked={locked}
+              onChange={(v) => update("returnerEmail", v)}
+              placeholder="name@example.com"
+              type="email"
+            />
+            <label style={S.fieldLabel}>
+              Circuit
+              <select
+                style={{ ...S.fieldInput, ...(locked ? S.fieldInputLocked : {}) }}
+                value={requester.returnerCircuit || ""}
+                disabled={locked}
+                onChange={(e) => update("returnerCircuit", e.target.value)}
+              >
+                <option value="">Select a circuit…</option>
+                {CIRCUITS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
       )}
 

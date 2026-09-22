@@ -14,11 +14,15 @@ export function ItemCard({ item, onCheckOut, onShowQr, adminMode, onEdit, onDele
   const images = getItemImages(item);
 
   const [outQty, setOutQty] = useState(1);
-  const outMax = Math.max(available, 1);
+  // The requester screen is a static form — quantity choice isn't
+  // limited by anyone else's live picks; conflicts are sorted out
+  // later by staff when the order is reviewed, not prevented here.
+  // Admin's Catalog view still shows and respects the real live count.
+  const outMax = adminMode ? Math.max(available, 1) : Math.max(item.total, 1);
   const safeOutQty = Math.min(outQty, outMax);
 
   return (
-    <div style={{ ...S.itemCard, ...(fullyOut ? S.itemCardOut : {}) }}>
+    <div style={{ ...S.itemCard, ...(adminMode && fullyOut ? S.itemCardOut : {}) }}>
       <div style={{ ...S.catStripe, background: color }} />
       {!adminMode && (
         <button style={S.qrBtn} onClick={onShowQr} title="Show QR code">
@@ -32,31 +36,28 @@ export function ItemCard({ item, onCheckOut, onShowQr, adminMode, onEdit, onDele
       <div style={S.itemName}>{item.name}</div>
       {item.note && <div style={S.itemNote}>{item.note}</div>}
 
-      <div style={S.availableRow}>
-        <span style={S.availableCount}>{available}</span>
-        <span style={S.availableLabel}> of {item.total} available</span>
-      </div>
+      {adminMode ? (
+        <div style={S.availableRow}>
+          <span style={S.availableCount}>{available}</span>
+          <span style={S.availableLabel}> of {item.total} available</span>
+        </div>
+      ) : (
+        <div style={S.availableRow}>
+          <span style={S.availableLabel}>Total on hand: {item.total}</span>
+        </div>
+      )}
 
       {!adminMode ? (
         <div style={S.qtyRow}>
-          <select
-            style={S.qtySelect}
-            value={safeOutQty}
-            onChange={(e) => setOutQty(Number(e.target.value))}
-            disabled={available <= 0}
-          >
+          <select style={S.qtySelect} value={safeOutQty} onChange={(e) => setOutQty(Number(e.target.value))}>
             {Array.from({ length: outMax }, (_, i) => i + 1).map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>
             ))}
           </select>
-          <button
-            style={{ ...S.outBtn, flex: 1, ...(available <= 0 ? S.btnDisabled : {}) }}
-            disabled={available <= 0}
-            onClick={() => onCheckOut(safeOutQty)}
-          >
-            Check Out
+          <button style={{ ...S.outBtn, flex: 1 }} onClick={() => onCheckOut(safeOutQty)}>
+            Add to Request
           </button>
         </div>
       ) : (

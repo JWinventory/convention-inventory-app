@@ -42,6 +42,7 @@ function defaultRequester() {
     returnerName: "",
     returnerPhone: "",
     returnerEmail: "",
+    returnerCircuit: "",
   };
 }
 
@@ -321,6 +322,7 @@ export default function App() {
         returnerName: found.returnerName || "",
         returnerPhone: found.returnerPhone || "",
         returnerEmail: found.returnerEmail || "",
+        returnerCircuit: found.returnerCircuit || "",
       });
 
       return true;
@@ -343,6 +345,7 @@ export default function App() {
         returnerName: foundDraft.returnerName || "",
         returnerPhone: foundDraft.returnerPhone || "",
         returnerEmail: foundDraft.returnerEmail || "",
+        returnerCircuit: foundDraft.returnerCircuit || "",
       });
       setSubmitEmail(foundDraft.requesterEmail || "");
       setSubmitNotes(foundDraft.notes || "");

@@ -3,7 +3,7 @@ import { S } from "../styles";
 import { Icon } from "./Icon";
 
 const CIRCUITS = ["TX 27-S", "TX 65-B", "TX 9", "TX 18"];
-const EVENT_TYPES = ["Circuit", "Regional", "Memorial"];
+const EVENT_TYPES = ["Circuit Assembly", "Regional Convention", "Memorial"];
 
 export function RequesterForm({ requester, setRequester, locked, onSave, onEdit }) {
   function update(field, val) {

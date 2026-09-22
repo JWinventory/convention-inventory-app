@@ -244,7 +244,7 @@ export function useInventory() {
   // device can find it (by phone/email) and join in before anything is
   // submitted. Pass an existing draftId to update it in place; pass
   // null/undefined to create a new one and get back its id.
-  const saveDraft = useCallback(async (draftId, requester, email, notes) => {
+  const saveDraft = useCallback(async (draftId, requester, email, notes, items) => {
     setSyncStatus("yellow");
     try {
       const payload = {
@@ -256,6 +256,7 @@ export function useInventory() {
         pickupDate: requester.pickupDate || "",
         returnDate: requester.returnDate || "",
         notes: notes || "",
+        items: items || [],
         updatedAtMs: Date.now(),
       };
       if (draftId) {
@@ -280,6 +281,20 @@ export function useInventory() {
       await deleteDoc(doc(db, DRAFTS_COL, draftId));
     } catch (e) {
       // non-critical — a leftover draft doc is harmless
+    }
+  }, []);
+
+  // Lets staff add/remove items on a draft directly — a draft never
+  // reserves live inventory (that only happens once an order is
+  // actually submitted), so this is just a plain field update, no
+  // stock reconciliation needed.
+  const updateDraftItems = useCallback(async (draftId, newItems) => {
+    setSyncStatus("yellow");
+    try {
+      await updateDoc(doc(db, DRAFTS_COL, draftId), { items: newItems, updatedAtMs: Date.now() });
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
     }
   }, []);
 
@@ -427,6 +442,7 @@ export function useInventory() {
     addOrder,
     saveDraft,
     deleteDraft,
+    updateDraftItems,
     updateOrderStatus,
     updateOrder,
     deleteOrder,

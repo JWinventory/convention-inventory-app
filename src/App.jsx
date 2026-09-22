@@ -414,7 +414,7 @@ export default function App() {
   // inventory by the difference — removing or reducing an item returns
   // stock to available, adding or increasing reserves more of it —
   // then saves the order's new item list.
-  async function handleUpdateOrderItems(order, newItems) {
+  async function handleUpdateOrderItems(order, newItems, newDetails) {
     const oldMap = new Map((order.items || []).map((li) => [li.name, li.qty]));
     const newMap = new Map(newItems.map((li) => [li.name, li.qty]));
     const allNames = new Set([...oldMap.keys(), ...newMap.keys()]);
@@ -431,7 +431,7 @@ export default function App() {
       }
     }
 
-    await updateOrder(order.id, { items: newItems });
+    await updateOrder(order.id, { items: newItems, ...(newDetails || {}) });
   }
 
   // Cancels an in-progress (not-yet-submitted) draft. A draft never
@@ -449,8 +449,8 @@ export default function App() {
   // Staff adding/removing items on a draft before it's ever submitted —
   // no live inventory to reconcile here, since a draft doesn't reserve
   // anything until it becomes a real order.
-  async function handleUpdateDraftItems(draft, newItems) {
-    await updateDraftItems(draft.id, newItems);
+  async function handleUpdateDraftItems(draft, newItems, newDetails) {
+    await updateDraftItems(draft.id, { items: newItems, ...(newDetails || {}) });
   }
 
   // Permanently deletes an order from history. Unlike cancelling, this

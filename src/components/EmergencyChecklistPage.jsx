@@ -8,6 +8,10 @@ import { S } from "../styles";
 //      pull sheet, printable on its own.
 //   2. The full catalog checklist, grouped by department, for a general
 //      paper backup of everything in inventory.
+// Both use a count-based checklist format, grouped by department: a
+// blank "Returned: ___ of N" line per item plus a Notes line, rather
+// than a single checkbox — this scales cleanly to any quantity and
+// leaves room to note anything damaged or missing.
 // "Print This List" / "Print Checklist" only print the one block clicked —
 // everything else is hidden from the print output via the printing-scoped
 // body class below, regardless of how many order sections exist.
@@ -37,6 +41,22 @@ export function EmergencyChecklistPage({ items, orders }) {
   }
 
   const readyOrders = useMemo(() => (orders || []).filter((o) => o.status === "fulfilled"), [orders]);
+
+  // Groups one order's items by department, looking each item's
+  // category up from the live catalog (an order's own items only
+  // store name + qty).
+  function groupOrderItemsByDept(order) {
+    const byDept = new Map();
+    for (const li of order.items || []) {
+      const liveItem = items.find((it) => it.name === li.name);
+      const dept = liveItem ? liveItem.category : "Uncategorized";
+      if (!byDept.has(dept)) byDept.set(dept, []);
+      byDept.get(dept).push(li);
+    }
+    return Array.from(byDept.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([department, deptItems]) => ({ department, items: deptItems }));
+  }
 
   const groups = useMemo(() => {
     const sorted = [...items].sort(
@@ -87,18 +107,31 @@ export function EmergencyChecklistPage({ items, orders }) {
             <table className="order-print-table" style={tableStyle}>
               <thead>
                 <tr>
-                  <th style={thStyle}>✓</th>
                   <th style={thStyle}>Item</th>
-                  <th style={{ ...thStyle, textAlign: "center" }}>Qty</th>
+                  <th style={{ ...thStyle, width: 110 }}>Returned</th>
+                  <th style={{ ...thStyle, width: "35%" }}>Notes</th>
                 </tr>
               </thead>
               <tbody>
-                {(order.items || []).map((li, idx) => (
-                  <tr key={idx}>
-                    <td style={{ ...tdStyle, width: 30, fontSize: 16 }}>☐</td>
-                    <td style={tdStyle}>{li.name}</td>
-                    <td style={{ ...tdStyle, textAlign: "center" }}>{li.qty}</td>
-                  </tr>
+                {groupOrderItemsByDept(order).map((group, groupIdx) => (
+                  <React.Fragment key={group.department}>
+                    <tr>
+                      <td colSpan={3} style={{ ...deptRowStyle, ...(groupIdx > 0 ? deptSeparatorStyle : {}) }}>
+                        {group.department}
+                      </td>
+                    </tr>
+                    {group.items.map((li, idx) => (
+                      <tr key={idx}>
+                        <td style={tdStyle}>{li.name}</td>
+                        <td style={tdStyle}>
+                          <span style={blankLineStyle} /> of {li.qty}
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={notesLineStyle} />
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -126,9 +159,9 @@ export function EmergencyChecklistPage({ items, orders }) {
           <table className="checklist-print-table" style={tableStyle}>
             <thead>
               <tr>
-                <th style={thStyle}>✓</th>
                 <th style={thStyle}>Item</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
+                <th style={{ ...thStyle, width: 110 }}>Returned</th>
+                <th style={{ ...thStyle, width: "35%" }}>Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -141,9 +174,13 @@ export function EmergencyChecklistPage({ items, orders }) {
                   </tr>
                   {group.items.map((item) => (
                     <tr key={item.id}>
-                      <td style={{ ...tdStyle, width: 30, fontSize: 16 }}>☐</td>
                       <td style={tdStyle}>{item.name}</td>
-                      <td style={{ ...tdStyle, textAlign: "center" }}>{item.total}</td>
+                      <td style={tdStyle}>
+                        <span style={blankLineStyle} /> of {item.total}
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={notesLineStyle} />
+                      </td>
                     </tr>
                   ))}
                 </React.Fragment>
@@ -212,4 +249,17 @@ const deptRowStyle = {
 
 const deptSeparatorStyle = {
   borderTop: "3px solid #999",
+};
+
+const blankLineStyle = {
+  display: "inline-block",
+  borderBottom: "1px solid #999",
+  width: 50,
+};
+
+const notesLineStyle = {
+  display: "inline-block",
+  borderBottom: "1px solid #ccc",
+  width: "100%",
+  height: 14,
 };

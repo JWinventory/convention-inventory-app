@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { S } from "../styles";
+import { EditOrderModal } from "./EditOrderModal";
 
 // currentVolunteerName is who's actually logged in right now — used to
 // make sure only the designated Reviewer can click "Mark as Reviewed"
@@ -14,6 +15,7 @@ export function OrdersPage({
   onMarkReady,
   onCancelOrder,
   onCancelDraft,
+  onUpdateOrderItems,
   volunteers,
   reviewerId,
   currentVolunteerName,
@@ -21,6 +23,7 @@ export function OrdersPage({
   onUpdateOrder,
 }) {
   const [search, setSearch] = useState("");
+  const [editingOrder, setEditingOrder] = useState(null);
 
   const reviewer = volunteers.find((v) => v.id === reviewerId) || null;
   const reviewerName = reviewer?.name || "";
@@ -108,6 +111,7 @@ export function OrdersPage({
           onMarkReady={onMarkReady}
           onCancelOrder={onCancelOrder}
           onUpdateOrder={onUpdateOrder}
+          onEditOrder={() => setEditingOrder(order)}
         />
       ))}
 
@@ -123,11 +127,20 @@ export function OrdersPage({
           ))}
         </>
       )}
+
+      {editingOrder && (
+        <EditOrderModal
+          order={editingOrder}
+          items={items}
+          onSave={(newItems) => onUpdateOrderItems(editingOrder, newItems)}
+          onClose={() => setEditingOrder(null)}
+        />
+      )}
     </div>
   );
 }
 
-function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, canCancel, onMarkReady, onCancelOrder, onUpdateOrder }) {
+function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, canCancel, onMarkReady, onCancelOrder, onUpdateOrder, onEditOrder }) {
   const [sending, setSending] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [pickedFillers, setPickedFillers] = useState(order.assignedFillers || []);
@@ -272,7 +285,10 @@ function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, 
         </div>
       )}
 
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", textAlign: "right" }}>
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <button style={editLinkStyle} onClick={onEditOrder}>
+          Edit Items
+        </button>
         {canCancel ? (
           <button style={cancelLinkStyle} disabled={cancelling} onClick={handleCancel}>
             {cancelling ? "Cancelling…" : "Cancel & Archive Order"}
@@ -362,6 +378,16 @@ const needsReviewBannerStyle = {
   fontSize: 13,
   fontWeight: 700,
   marginBottom: 14,
+};
+
+const editLinkStyle = {
+  background: "none",
+  border: "none",
+  color: "#0072CE",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+  padding: 0,
 };
 
 const cancelLinkStyle = {

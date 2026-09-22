@@ -17,6 +17,7 @@ import { firebaseConfigured } from "./firebase";
 
 const REQUESTER_KEY = "convention-inventory-requester";
 const MY_ORDER_KEY = "convention-inventory-my-order-id";
+const MY_DRAFT_KEY = "convention-inventory-my-draft-id";
 
 function loadRequester() {
   try {
@@ -59,6 +60,25 @@ function findMyOrder(orders, items, query) {
   return active[0] || null;
 }
 
+// Finds the most recently-saved draft (in-progress, not yet submitted
+// order) whose phone or email matches the query. Drafts arrive already
+// sorted newest-first by the live query in useInventory.
+function findMyDraft(drafts, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  const qDigits = q.replace(/\D/g, "");
+
+  const matches = drafts.filter((d) => {
+    const phoneDigits = (d.requesterPhone || "").replace(/\D/g, "");
+    const email = (d.requesterEmail || "").toLowerCase();
+    const phoneMatch = qDigits.length >= 7 && phoneDigits === qDigits;
+    const emailMatch = q.includes("@") && email === q;
+    return phoneMatch || emailMatch;
+  });
+
+  return matches[0] || null;
+}
+
 export default function App() {
   const {
     items,
@@ -75,7 +95,9 @@ export default function App() {
     deleteItem,
     applyCheckChange,
     addOrder,
+    saveDraft,
     deleteDraft,
+    updateDraftItems,
     updateOrderStatus,
     updateOrder,
     deleteOrder,
@@ -95,6 +117,7 @@ export default function App() {
   const [checkInScanOpen, setCheckInScanOpen] = useState(false);
   const [qrItem, setQrItem] = useState(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [myDraftId, setMyDraftId] = useState(() => localStorage.getItem(MY_DRAFT_KEY) || null);
   // Purely local — the browsing screen is a static form. Nothing here
   // touches Firestore or is visible to anyone else until Submit; a new
   // visitor always starts with this empty, regardless of what anyone
@@ -218,6 +241,11 @@ export default function App() {
     localStorage.setItem(MY_ORDER_KEY, id);
     setMyOrderId(id);
     setSelections({}); // clear the static form now that it's been submitted
+    if (myDraftId) {
+      deleteDraft(myDraftId);
+      localStorage.removeItem(MY_DRAFT_KEY);
+      setMyDraftId(null);
+    }
 
     // Nothing touched live inventory while browsing — this is what
     // actually reserves the stock, all at once, now that the order
@@ -250,28 +278,54 @@ export default function App() {
     }
   }
 
-  // Cross-device lookup: a requester who submitted on another device
-  // can find their order here by phone or email, and pick it up on
-  // this one too. (Only submitted orders — the browsing/picking screen
-  // itself is a static, local-only form with nothing to look up until
-  // Submit.)
+  // Cross-device lookup: finds either a submitted order (to pick up
+  // tracking/check-in on this device) or an in-progress draft (to
+  // resume picking items where it was left off) by phone or email.
   function handleFindOrder(query) {
     const found = findMyOrder(orders, items, query);
-    if (!found) return false;
+    if (found) {
+      localStorage.setItem(MY_ORDER_KEY, found.id);
+      setMyOrderId(found.id);
 
-    localStorage.setItem(MY_ORDER_KEY, found.id);
-    setMyOrderId(found.id);
+      setRequester({
+        name: found.requesterName || "",
+        phone: found.requesterPhone || "",
+        eventType: found.eventType || "",
+        eventDate: found.eventDate || "",
+        pickupDate: found.pickupDate || "",
+        returnDate: found.returnDate || "",
+      });
 
-    setRequester({
-      name: found.requesterName || "",
-      phone: found.requesterPhone || "",
-      eventType: found.eventType || "",
-      eventDate: found.eventDate || "",
-      pickupDate: found.pickupDate || "",
-      returnDate: found.returnDate || "",
-    });
+      return true;
+    }
 
-    return true;
+    const foundDraft = findMyDraft(drafts, query);
+    if (foundDraft) {
+      localStorage.setItem(MY_DRAFT_KEY, foundDraft.id);
+      setMyDraftId(foundDraft.id);
+
+      setRequester({
+        name: foundDraft.requesterName || "",
+        phone: foundDraft.requesterPhone || "",
+        eventType: foundDraft.eventType || "",
+        eventDate: foundDraft.eventDate || "",
+        pickupDate: foundDraft.pickupDate || "",
+        returnDate: foundDraft.returnDate || "",
+      });
+      setSubmitEmail(foundDraft.requesterEmail || "");
+      setSubmitNotes(foundDraft.notes || "");
+
+      const restored = {};
+      for (const li of foundDraft.items || []) {
+        const liveItem = items.find((i) => i.name === li.name);
+        if (liveItem) restored[liveItem.id] = li.qty;
+      }
+      setSelections(restored);
+
+      return true;
+    }
+
+    return false;
   }
 
   // Staff-side: flips the order to "fulfilled" and emails the requester
@@ -345,26 +399,23 @@ export default function App() {
     await updateOrder(order.id, { items: newItems });
   }
 
-  // Cancels an in-progress (not-yet-submitted) draft. Since items aren't
-  // tied to a specific draft until it's actually submitted, this releases
-  // everything currently checked out — the honest limitation being that if
-  // more than one draft is somehow in progress at once, this clears both.
+  // Cancels an in-progress (not-yet-submitted) draft. A draft never
+  // reserves live inventory — that only happens once an order is
+  // actually submitted — so cancelling one is just deleting the draft
+  // record itself, nothing to release back to available.
   async function handleCancelDraft(draft) {
     const requesterLabel = draft.requesterName || "this requester";
-    if (
-      !window.confirm(
-        `Cancel this in-progress order for ${requesterLabel}? Everything checked out so far will be returned to available.`
-      )
-    ) {
+    if (!window.confirm(`Cancel this in-progress draft for ${requesterLabel}? This can't be undone.`)) {
       return;
     }
-    for (const it of items) {
-      if ((it.out || 0) > 0) {
-        // eslint-disable-next-line no-await-in-loop
-        await applyCheckChange(it.id, -(it.out || 0), "Draft cancelled", "In-progress order cancelled by staff");
-      }
-    }
     await deleteDraft(draft.id);
+  }
+
+  // Staff adding/removing items on a draft before it's ever submitted —
+  // no live inventory to reconcile here, since a draft doesn't reserve
+  // anything until it becomes a real order.
+  async function handleUpdateDraftItems(draft, newItems) {
+    await updateDraftItems(draft.id, newItems);
   }
 
   // Permanently deletes an order from history. Unlike cancelling, this
@@ -439,6 +490,7 @@ export default function App() {
             onCancelOrder={handleCancelOrder}
             onUpdateOrderItems={handleUpdateOrderItems}
             onCancelDraft={handleCancelDraft}
+            onUpdateDraftItems={handleUpdateDraftItems}
             onDeleteOrder={handleDeleteOrder}
             volunteers={volunteers}
             volunteersReady={volunteersReady}
@@ -516,7 +568,18 @@ export default function App() {
       </main>
 
       {tab === "inventory" && myOrderPhase === "none" && !reviewOpen && (
-        <button style={S.fabSubmit} onClick={() => setReviewOpen(true)}>
+        <button
+          style={S.fabSubmit}
+          onClick={async () => {
+            const draftItems = checkedOutItems.map((it) => ({ name: it.name, qty: it.out }));
+            const id = await saveDraft(myDraftId, requester, submitEmail, submitNotes, draftItems);
+            if (id && !myDraftId) {
+              localStorage.setItem(MY_DRAFT_KEY, id);
+              setMyDraftId(id);
+            }
+            setReviewOpen(true);
+          }}
+        >
           <Icon.bell />
           <span>Save</span>
           {checkedOutItems.length > 0 && <span style={S.fabBadge}>{checkedOutItems.length}</span>}

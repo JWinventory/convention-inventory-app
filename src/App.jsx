@@ -16,19 +16,8 @@ import { PullToRefresh } from "./components/PullToRefresh";
 import { useInventory } from "./useInventory";
 import { firebaseConfigured } from "./firebase";
 
-const REQUESTER_KEY = "convention-inventory-requester";
 const MY_ORDER_KEY = "convention-inventory-my-order-id";
 const MY_DRAFT_KEY = "convention-inventory-my-draft-id";
-
-function loadRequester() {
-  try {
-    const raw = localStorage.getItem(REQUESTER_KEY);
-    if (raw) return { ...defaultRequester(), ...JSON.parse(raw) };
-  } catch (e) {
-    /* ignore */
-  }
-  return defaultRequester();
-}
 
 function defaultRequester() {
   return {
@@ -135,7 +124,7 @@ export default function App() {
   } = useInventory();
 
   const [tab, setTab] = useState("inventory"); // inventory | admin
-  const [requester, setRequester] = useState(loadRequester);
+  const [requester, setRequester] = useState(defaultRequester);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
   const [checkInScanOpen, setCheckInScanOpen] = useState(false);
@@ -171,13 +160,6 @@ export default function App() {
   const [myOrderId, setMyOrderId] = useState(() => localStorage.getItem(MY_ORDER_KEY) || null);
 
   useEffect(() => setNoteDraft(notes), [notes]);
-
-  // Requester info is always editable — just keep it saved locally as it
-  // changes, so it's remembered next time without needing an explicit
-  // "Save" step that would otherwise lock the fields.
-  useEffect(() => {
-    localStorage.setItem(REQUESTER_KEY, JSON.stringify(requester));
-  }, [requester]);
 
   const categories = useMemo(() => {
     const known = Object.keys(CAT_COLORS);
@@ -321,7 +303,7 @@ export default function App() {
 
     const reviewerVolunteer = volunteers.find((v) => v.id === reviewerId);
     try {
-      await fetch("/api/notify-review", {
+      const res = await fetch("/api/notify-review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -332,15 +314,19 @@ export default function App() {
           items: order.items,
         }),
       });
+      if (!res.ok) {
+        console.error("notify-review failed:", res.status, await res.text());
+      }
     } catch (err) {
       // Order is already saved even if the review-alert email fails to send.
+      console.error("notify-review request failed:", err);
     }
 
     // Confirms to the requester (and the returner, if one was named)
     // that the request went through — separate from the reviewer alert
     // above, and just as non-blocking if it fails to send.
     try {
-      await fetch("/api/notify-submitted", {
+      const res = await fetch("/api/notify-submitted", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -357,8 +343,12 @@ export default function App() {
           items: order.items,
         }),
       });
+      if (!res.ok) {
+        console.error("notify-submitted failed:", res.status, await res.text());
+      }
     } catch (err) {
       // Order is already saved even if this confirmation email fails to send.
+      console.error("notify-submitted request failed:", err);
     }
   }
 

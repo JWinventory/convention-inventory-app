@@ -208,18 +208,26 @@ function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, 
             </span>
             <StatusTag status={order.status} />
           </div>
-          <div style={S.tinyMuted}>
-            {order.requesterPhone || "—"}
-            {order.requesterEmail ? ` · ${order.requesterEmail}` : ""}
-          </div>
         </div>
         <div style={{ ...S.tinyMuted, textAlign: "right" }}>Submitted {order.createdAtLabel || "—"}</div>
       </div>
 
-      <div style={S.tinyMuted}>
-        {order.eventType || "—"} · Event {order.eventDate || "—"} · Pickup {order.pickupDate || "—"} · Return{" "}
-        {order.returnDate || "—"}
+      <div style={orderDetailTextStyle}>
+        {order.requesterPhone || "—"}
+        {order.requesterEmail ? ` · ${order.requesterEmail}` : ""}
+        <br />
+        {order.circuit || "—"} · {order.eventType || "—"} · Event {order.eventDate || "—"} · Pickup{" "}
+        {order.pickupDate || "—"} · Return {order.returnDate || "—"}
       </div>
+
+      {order.hasReturner && (
+        <div style={{ ...orderDetailTextStyle, marginTop: 6 }}>
+          <strong>Returning:</strong> {order.returnerName || "—"}
+          {order.returnerPhone ? ` · ${order.returnerPhone}` : ""}
+          {order.returnerEmail ? ` · ${order.returnerEmail}` : ""}
+          {order.returnerCircuit ? ` · ${order.returnerCircuit}` : ""}
+        </div>
+      )}
 
       <div style={{ ...S.summaryListWrap, marginTop: 10 }}>
         {order.lineItems.map((li, idx) => (
@@ -337,14 +345,21 @@ function DraftCard({ draft, canCancel, onCancel, onEditDraft }) {
       <div style={{ fontWeight: 700, fontSize: 15, color: "#1a1a2e" }}>
         {draft.requesterName || "Unnamed requester"}
       </div>
-      <div style={S.tinyMuted}>
+      <div style={orderDetailTextStyle}>
         {draft.requesterPhone || "—"}
         {draft.requesterEmail ? ` · ${draft.requesterEmail}` : ""}
+        <br />
+        {draft.circuit || "—"} · {draft.eventType || "—"} · Event {draft.eventDate || "—"} · Pickup{" "}
+        {draft.pickupDate || "—"} · Return {draft.returnDate || "—"}
       </div>
-      <div style={S.tinyMuted}>
-        {draft.eventType || "—"} · Event {draft.eventDate || "—"} · Pickup {draft.pickupDate || "—"} · Return{" "}
-        {draft.returnDate || "—"}
-      </div>
+      {draft.hasReturner && (
+        <div style={{ ...orderDetailTextStyle, marginTop: 6 }}>
+          <strong>Returning:</strong> {draft.returnerName || "—"}
+          {draft.returnerPhone ? ` · ${draft.returnerPhone}` : ""}
+          {draft.returnerEmail ? ` · ${draft.returnerEmail}` : ""}
+          {draft.returnerCircuit ? ` · ${draft.returnerCircuit}` : ""}
+        </div>
+      )}
       {draft.notes && (
         <div style={{ ...S.tinyMuted, marginTop: 8 }}>
           <strong>Notes:</strong> {draft.notes}
@@ -413,6 +428,13 @@ const needsReviewBannerStyle = {
   fontSize: 13,
   fontWeight: 700,
   marginBottom: 14,
+};
+
+const orderDetailTextStyle = {
+  fontSize: 14,
+  color: "#333",
+  lineHeight: 1.6,
+  marginTop: 4,
 };
 
 const editLinkStyle = {

@@ -64,7 +64,7 @@ You'll get another email once it's ready for pickup — no need to check back ma
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Convention Inventory <onboarding@resend.dev>",
+        from: "CEPC-Lubbock <alerts@notify.jw-inventory.com>",
         to: recipients,
         subject: "Your equipment request has been submitted",
         text,

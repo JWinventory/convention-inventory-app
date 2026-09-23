@@ -65,14 +65,13 @@ export function FindOrderForm({ onFind }) {
 }
 
 const findOrderCtaStyle = {
-  background: "#0072CE",
-  color: "#fff",
-  border: "none",
+  background: "#eaf3fc",
+  color: "#2471a3",
+  border: "1px solid #b8d9f5",
   borderRadius: 10,
-  padding: "16px 24px",
-  fontSize: 17,
-  fontWeight: 800,
+  padding: "10px 18px",
+  fontSize: 14,
+  fontWeight: 700,
   width: "100%",
   cursor: "pointer",
-  boxShadow: "0 2px 8px rgba(0,114,206,0.35)",
 };

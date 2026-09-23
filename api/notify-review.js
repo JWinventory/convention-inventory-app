@@ -54,7 +54,7 @@ Open the app's Admin > Orders tab to review it.
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Convention Inventory <onboarding@resend.dev>",
+        from: "CEPC-Lubbock <alerts@notify.jw-inventory.com>",
         to: recipients,
         subject: "New request needs your review",
         text,

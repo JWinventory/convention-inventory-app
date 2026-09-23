@@ -48,7 +48,7 @@ Once you've picked everything up and are ready to return it, scan each item's QR
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Convention Inventory <onboarding@resend.dev>",
+        from: "CEPC-Lubbock <alerts@notify.jw-inventory.com>",
         to: [requesterEmail],
         subject: "Your equipment request is ready!",
         text,

@@ -246,6 +246,7 @@ export default function App() {
   const myLineItems = useMemo(() => (myOrder ? computeLineItems(myOrder, items) : []), [myOrder, items]);
   const myOrderPhase = useMemo(() => {
     if (!myOrder) return "none";
+    if (myOrder.status === "cancelled") return "none";
     const allDone = myLineItems.length > 0 && myLineItems.every((li) => li.stillOut === 0);
     if (allDone) return "none";
     return myOrder.status === "fulfilled" ? "ready" : "submitted";

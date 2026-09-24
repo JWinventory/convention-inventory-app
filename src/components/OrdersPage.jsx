@@ -10,7 +10,7 @@ import { EditOrderModal } from "./EditOrderModal";
 // order (submitted or still in-progress) uses the same reviewer check:
 // any one designated Reviewer, or a full admin (volunteer-management
 // access), can do it.
-const REQUIRED_REVIEWS = 2;
+const REQUIRED_REVIEWS = 1;
 
 export function OrdersPage({
   orders,

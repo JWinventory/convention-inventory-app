@@ -74,6 +74,9 @@ export function ItemCard({ item, selectedQty, onCheckOut, onShowQr, adminMode, o
             <button style={{ ...S.outBtn, flex: 1 }} onClick={() => onCheckOut(safeOutQty)}>
               Add to Request
             </button>
+            <button style={allBtnStyle} onClick={() => onCheckOut(remaining)} title={`Add all ${remaining} remaining`}>
+              All
+            </button>
           </div>
         )
       ) : (
@@ -93,3 +96,15 @@ export function ItemCard({ item, selectedQty, onCheckOut, onShowQr, adminMode, o
     </div>
   );
 }
+
+const allBtnStyle = {
+  background: "#eaf3fc",
+  color: "#2471a3",
+  border: "1px solid #b8d9f5",
+  borderRadius: 6,
+  padding: "0 12px",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};

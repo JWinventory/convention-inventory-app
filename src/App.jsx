@@ -100,7 +100,7 @@ export default function App() {
     notes,
     volunteers,
     volunteersReady,
-    reviewerId,
+    reviewerIds,
     syncStatus,
     seedIfEmpty,
     addItem,
@@ -120,7 +120,7 @@ export default function App() {
     deleteVolunteer,
     resetVolunteerPassword,
     setVolunteerPassword,
-    saveReviewerId,
+    saveReviewerIds,
   } = useInventory();
 
   const [tab, setTab] = useState("inventory"); // inventory | admin
@@ -302,13 +302,18 @@ export default function App() {
       }
     }
 
-    const reviewerVolunteer = volunteers.find((v) => v.id === reviewerId);
+    // notify-review already supports comma-separated multiple addresses,
+    // so every configured reviewer (up to 4) gets the alert, not just one.
+    const reviewerEmails = reviewerIds
+      .map((id) => volunteers.find((v) => v.id === id)?.email)
+      .filter(Boolean)
+      .join(", ");
     try {
       const res = await fetch("/api/notify-review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          reviewerEmail: reviewerVolunteer?.email || "",
+          reviewerEmail: reviewerEmails,
           requester: { name: order.requester.name, phone: order.requester.phone },
           eventType: order.requester.eventType,
           eventDate: order.requester.eventDate,
@@ -585,13 +590,13 @@ export default function App() {
             onDeleteOrder={handleDeleteOrder}
             volunteers={volunteers}
             volunteersReady={volunteersReady}
-            reviewerId={reviewerId}
+            reviewerIds={reviewerIds}
             onAddVolunteer={addVolunteer}
             onUpdateVolunteer={updateVolunteer}
             onDeleteVolunteer={deleteVolunteer}
             onResetVolunteerPassword={resetVolunteerPassword}
             onSetVolunteerPassword={setVolunteerPassword}
-            onSaveReviewerId={saveReviewerId}
+            onSaveReviewerIds={saveReviewerIds}
             onUpdateOrder={updateOrder}
           />
         ) : myOrderPhase !== "none" ? (

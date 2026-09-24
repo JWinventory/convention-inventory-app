@@ -1,4 +1,5 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { S } from "../styles";
 
 // Shown on the requester's own device in place of the checkout screen
@@ -9,30 +10,30 @@ import { S } from "../styles";
 // was requested, with a Print List button, in case a paper copy is
 // handy to keep or hand off. Once ready for pickup, a separate Print
 // Check-In Checklist button gives a pen-and-paper backup for checking
-// items back in by department, in case the QR scanner isn't an option.
+// items back in by department — using the exact same proven print
+// mechanism as the admin Print Lists page, so the two are guaranteed
+// to behave identically.
 export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn }) {
   const allDone = lineItems.length > 0 && lineItems.every((li) => li.stillOut === 0);
+  const [checklistActive, setChecklistActive] = useState(false);
 
   useEffect(() => {
     function handleAfterPrint() {
-      document.body.classList.remove("print-mode-checklist");
+      document.body.classList.remove("printing-checklist");
+      setChecklistActive(false);
     }
     window.addEventListener("afterprint", handleAfterPrint);
     return () => window.removeEventListener("afterprint", handleAfterPrint);
   }, []);
 
-  // The checklist's print visibility is controlled by a plain
-  // document.body class, not a React-rendered className — that class
-  // change is a synchronous DOM mutation with nothing for React to
-  // race, so print can fire immediately right after it.
+  // flushSync forces React to finish applying the print-active class
+  // before we call print — the same mechanism the admin Print Lists
+  // page uses, since that's the one proven to work reliably.
   function printChecklist() {
-    document.body.classList.add("print-mode-checklist");
-    // Reading a layout property forces the browser to apply the class
-    // change synchronously before we continue — without this, some
-    // browsers can defer it to the next paint, so print can fire using
-    // stale styles that still show the whole card instead of switching
-    // to the checklist.
-    void document.body.offsetHeight;
+    flushSync(() => {
+      setChecklistActive(true);
+    });
+    document.body.classList.add("printing-checklist");
     window.print();
   }
 
@@ -101,8 +102,9 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn }) {
       )}
 
       {/* Bare pen-and-paper backup: a count-based checklist grouped by
-          department, only shown when actually printing in checklist mode. */}
-      <div className="checkin-checklist-print-only">
+          department, identical in format to the admin Print Lists page.
+          Only shown when actually printing in checklist mode. */}
+      <div className={"checkin-checklist-print-only" + (checklistActive ? " print-active" : "")}>
         <h2 style={{ marginBottom: 4 }}>Check-In Checklist</h2>
         <p style={{ fontSize: 12, color: "#666", marginTop: 0 }}>
           {order?.requesterName || "—"} · Return Date {order?.returnDate || "—"}
@@ -189,13 +191,22 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn }) {
           }
           .no-print { display: none !important; }
 
-          /* When printing the checklist specifically, hide everything
-             else in the card so only the checklist itself prints. */
-          body.print-mode-checklist .my-order-print-root > *:not(.checkin-checklist-print-only) {
-            display: none !important;
+          /* Checklist-specific scoping — same mechanism as the admin
+             Print Lists page: once this body class is active, hide
+             absolutely everything, then reveal only the one marked
+             block via visibility (not display), which is what's
+             proven reliable for print across browsers. */
+          body.printing-checklist * { visibility: hidden; }
+          body.printing-checklist .checkin-checklist-print-only.print-active,
+          body.printing-checklist .checkin-checklist-print-only.print-active * {
+            visibility: visible;
           }
-          body.print-mode-checklist .checkin-checklist-print-only {
+          body.printing-checklist .checkin-checklist-print-only.print-active {
             display: block !important;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
           }
         }
       `}</style>

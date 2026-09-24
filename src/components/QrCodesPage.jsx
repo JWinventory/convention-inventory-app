@@ -46,6 +46,10 @@ function codesForItem(item) {
 function printAll() {
   clearPrintMarks();
   document.body.classList.add("print-all-mode");
+  // Forces the class change to apply synchronously before printing —
+  // without this, some browsers can defer it to the next paint, so
+  // print can fire using stale styles that still show the whole page.
+  void document.body.offsetHeight;
   const cleanup = () => {
     document.body.classList.remove("print-all-mode");
     window.removeEventListener("afterprint", cleanup);

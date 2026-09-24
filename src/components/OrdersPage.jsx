@@ -3,11 +3,15 @@ import { S } from "../styles";
 import { EditOrderModal } from "./EditOrderModal";
 
 // currentVolunteerName is who's actually logged in right now — used to
-// make sure only the designated Reviewer can click "Mark as Reviewed"
-// for themselves, not just anyone with Orders access. Cancelling an
-// order (submitted or still in-progress) is restricted the same way:
-// only the designated Reviewer, or a full admin (volunteer-management
+// make sure only a designated Reviewer can click "Mark as Reviewed"
+// for themselves, not just anyone with Orders access. Up to 4
+// reviewers can be configured; any 2 of them reviewing an order is
+// enough to advance it — see REQUIRED_REVIEWS below. Cancelling an
+// order (submitted or still in-progress) uses the same reviewer check:
+// any one designated Reviewer, or a full admin (volunteer-management
 // access), can do it.
+const REQUIRED_REVIEWS = 2;
+
 export function OrdersPage({
   orders,
   drafts,
@@ -18,7 +22,7 @@ export function OrdersPage({
   onUpdateDraftItems,
   onUpdateOrderItems,
   volunteers,
-  reviewerId,
+  reviewerIds,
   currentVolunteerName,
   isCurrentVolunteerAdmin,
   onUpdateOrder,
@@ -27,10 +31,10 @@ export function OrdersPage({
   const [editingOrder, setEditingOrder] = useState(null);
   const [editingDraft, setEditingDraft] = useState(null);
 
-  const reviewer = volunteers.find((v) => v.id === reviewerId) || null;
-  const reviewerName = reviewer?.name || "";
+  const reviewerVolunteers = (reviewerIds || []).map((id) => volunteers.find((v) => v.id === id)).filter(Boolean);
+  const reviewerNames = reviewerVolunteers.map((v) => v.name);
   const volunteerNames = volunteers.map((v) => v.name);
-  const isReviewer = Boolean(reviewerName) && currentVolunteerName === reviewerName;
+  const isReviewer = reviewerNames.includes(currentVolunteerName);
   const canCancel = isReviewer || Boolean(isCurrentVolunteerAdmin);
 
   // For each order, look up the *current* out-count for every item it listed
@@ -73,7 +77,9 @@ export function OrdersPage({
           {needsReviewCount === 1
             ? "1 request needs review"
             : `${needsReviewCount} requests need review`}
-          {reviewerName ? ` — ${reviewerName}, take a look below.` : " — set a reviewer under the Volunteers tab."}
+          {reviewerNames.length > 0
+            ? ` — ${reviewerNames.join(" / ")}, take a look below.`
+            : " — set at least 2 reviewers under the Volunteers tab."}
         </div>
       )}
 
@@ -107,7 +113,7 @@ export function OrdersPage({
           key={order.id}
           order={order}
           volunteerNames={volunteerNames}
-          reviewerName={reviewerName}
+          reviewerNames={reviewerNames}
           currentVolunteerName={currentVolunteerName}
           canCancel={canCancel}
           onMarkReady={onMarkReady}
@@ -159,13 +165,16 @@ export function OrdersPage({
   );
 }
 
-function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, canCancel, onMarkReady, onCancelOrder, onUpdateOrder, onEditOrder }) {
+function OrderCard({ order, volunteerNames, reviewerNames, currentVolunteerName, canCancel, onMarkReady, onCancelOrder, onUpdateOrder, onEditOrder }) {
   const [sending, setSending] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [pickedFillers, setPickedFillers] = useState(order.assignedFillers || []);
 
-  const reviewerConfigured = Boolean(reviewerName);
-  const isReviewer = reviewerConfigured && currentVolunteerName === reviewerName;
+  const reviewersConfigured = (reviewerNames || []).length > 0;
+  const isReviewer = (reviewerNames || []).includes(currentVolunteerName);
+  const reviewedBy = order.reviewedBy || [];
+  const alreadyReviewedByMe = reviewedBy.includes(currentVolunteerName);
+  const reviewsStillNeeded = Math.max(REQUIRED_REVIEWS - reviewedBy.length, 0);
 
   async function handleCancel() {
     setCancelling(true);
@@ -177,7 +186,12 @@ function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, 
   }
 
   function handleMarkReviewed() {
-    onUpdateOrder(order.id, { reviewedBy: [reviewerName], status: "reviewed" });
+    const updated = alreadyReviewedByMe ? reviewedBy : [...reviewedBy, currentVolunteerName];
+    const patch = { reviewedBy: updated };
+    if (updated.length >= REQUIRED_REVIEWS) {
+      patch.status = "reviewed";
+    }
+    onUpdateOrder(order.id, patch);
   }
 
   function toggleFiller(name) {
@@ -236,8 +250,9 @@ function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, 
               {li.name}
               {!li.exists && <span style={{ color: "#c0392b", fontSize: 11 }}> (item no longer in catalog)</span>}
             </span>
-            <span style={S.summaryQty}>
-              {li.stillOut} of {li.qty} still out
+            <span style={{ ...S.summaryQty, textAlign: "right" }}>
+              <div style={{ fontSize: 10, textTransform: "uppercase", color: "#999", fontWeight: 700 }}>Requested</div>
+              <div style={{ fontWeight: 700, color: "#1a1a2e" }}>{li.qty}</div>
             </span>
           </div>
         ))}
@@ -249,17 +264,29 @@ function OrderCard({ order, volunteerNames, reviewerName, currentVolunteerName, 
         </div>
       )}
 
-      {/* Phase 2, step 1: review — only the designated reviewer can act here */}
+      {/* Phase 2, step 1: review — any 2 of the up-to-4 designated reviewers signing off advances the order */}
       {order.status === "submitted" && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>
-          {!reviewerConfigured ? (
-            <p style={S.tinyMuted}>Set a reviewer under the Volunteers tab to continue.</p>
+          {!reviewersConfigured ? (
+            <p style={S.tinyMuted}>Set at least 2 reviewers under the Volunteers tab to continue.</p>
           ) : isReviewer ? (
-            <button style={S.primaryBtn} onClick={handleMarkReviewed}>
-              Mark as Reviewed ({reviewerName})
-            </button>
+            alreadyReviewedByMe ? (
+              <p style={S.tinyMuted}>
+                You've reviewed this ({reviewedBy.length} of {REQUIRED_REVIEWS} required
+                {reviewerNames.length > REQUIRED_REVIEWS ? `, ${reviewerNames.length} eligible` : ""}) — waiting on{" "}
+                {reviewsStillNeeded} more.
+              </p>
+            ) : (
+              <button style={S.primaryBtn} onClick={handleMarkReviewed}>
+                Mark as Reviewed ({currentVolunteerName})
+              </button>
+            )
           ) : (
-            <p style={S.tinyMuted}>Waiting on {reviewerName} to review this.</p>
+            <p style={S.tinyMuted}>
+              {reviewedBy.length > 0
+                ? `Reviewed by ${reviewedBy.join(", ")} (${reviewedBy.length} of ${REQUIRED_REVIEWS} required) — waiting on ${reviewsStillNeeded} more.`
+                : `Waiting on ${reviewerNames.join(" / ")} to review this.`}
+            </p>
           )}
         </div>
       )}

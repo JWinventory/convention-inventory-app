@@ -32,13 +32,13 @@ export function AdminHub({
   onDeleteOrder,
   volunteers,
   volunteersReady,
-  reviewerId,
+  reviewerIds,
   onAddVolunteer,
   onUpdateVolunteer,
   onDeleteVolunteer,
   onResetVolunteerPassword,
   onSetVolunteerPassword,
-  onSaveReviewerId,
+  onSaveReviewerIds,
   onUpdateOrder,
 }) {
   const [sessionId, setSessionId] = useState(() => sessionStorage.getItem(SESSION_KEY) || null);
@@ -140,7 +140,7 @@ export function AdminHub({
           onCancelDraft={onCancelDraft}
           onUpdateDraftItems={onUpdateDraftItems}
           volunteers={volunteers}
-          reviewerId={reviewerId}
+          reviewerIds={reviewerIds}
           currentVolunteerName={currentVolunteer.name}
           isCurrentVolunteerAdmin={Boolean(currentVolunteer.permissions?.volunteers)}
           onUpdateOrder={onUpdateOrder}
@@ -151,7 +151,7 @@ export function AdminHub({
           orders={orders}
           items={items}
           volunteers={volunteers}
-          reviewerId={reviewerId}
+          reviewerIds={reviewerIds}
           currentVolunteerName={currentVolunteer.name}
           isCurrentVolunteerAdmin={Boolean(currentVolunteer.permissions?.volunteers)}
           onDeleteOrder={onDeleteOrder}
@@ -162,12 +162,12 @@ export function AdminHub({
       {activeSection === "volunteers" && (
         <VolunteersPage
           volunteers={volunteers}
-          reviewerId={reviewerId}
+          reviewerIds={reviewerIds}
           onAddVolunteer={onAddVolunteer}
           onUpdateVolunteer={onUpdateVolunteer}
           onDeleteVolunteer={onDeleteVolunteer}
           onResetVolunteerPassword={onResetVolunteerPassword}
-          onSaveReviewerId={onSaveReviewerId}
+          onSaveReviewerIds={onSaveReviewerIds}
         />
       )}
     </div>

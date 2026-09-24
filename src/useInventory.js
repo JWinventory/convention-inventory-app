@@ -29,7 +29,7 @@ export function useInventory() {
   const [notes, setNotes] = useState("");
   const [volunteers, setVolunteers] = useState([]);
   const [volunteersReady, setVolunteersReady] = useState(false);
-  const [reviewerId, setReviewerId] = useState("");
+  const [reviewerIds, setReviewerIds] = useState([]); // up to 4 volunteer ids; 2 reviews required to advance an order
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState("yellow"); // green | yellow | red
   const [ready, setReady] = useState(false);
@@ -105,7 +105,7 @@ export function useInventory() {
     return () => unsub();
   }, []);
 
-  // live shared settings: notes, and which volunteer is the reviewer.
+  // live shared settings: notes, and which volunteers are reviewers.
   useEffect(() => {
     if (!firebaseConfigured) return;
     const ref = doc(db, META_DOC);
@@ -115,7 +115,7 @@ export function useInventory() {
         if (snap.exists()) {
           const d = snap.data();
           setNotes(d.notes || "");
-          setReviewerId(d.reviewerId || "");
+          setReviewerIds(Array.isArray(d.reviewerIds) ? d.reviewerIds : []);
         }
       },
       () => {}
@@ -425,10 +425,13 @@ export function useInventory() {
     }
   }, []);
 
-  const saveReviewerId = useCallback(async (id) => {
+  // Up to 4 volunteers can be set as reviewers; any 2 of them reviewing
+  // an order is enough to advance it (see the order-review logic in
+  // OrdersPage.jsx). Always trims to 4 client-side too, as a safety net.
+  const saveReviewerIds = useCallback(async (ids) => {
     setSyncStatus("yellow");
     try {
-      await setDoc(doc(db, META_DOC), { reviewerId: id, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, META_DOC), { reviewerIds: ids.slice(0, 4), updatedAt: serverTimestamp() }, { merge: true });
       setSyncStatus("green");
     } catch (e) {
       setSyncStatus("red");
@@ -442,7 +445,7 @@ export function useInventory() {
     notes,
     volunteers,
     volunteersReady,
-    reviewerId,
+    reviewerIds,
     loading,
     syncStatus,
     ready,
@@ -464,6 +467,6 @@ export function useInventory() {
     deleteVolunteer,
     resetVolunteerPassword,
     setVolunteerPassword,
-    saveReviewerId,
+    saveReviewerIds,
   };
 }

@@ -7,13 +7,12 @@ import { S } from "../styles";
 // requests can always be looked up. Deleting one here is permanent and
 // restricted to the designated Reviewer or a full admin, same as
 // cancelling an order.
-export function OrderHistoryPage({ orders, items, volunteers, reviewerId, currentVolunteerName, isCurrentVolunteerAdmin, onDeleteOrder }) {
+export function OrderHistoryPage({ orders, items, volunteers, reviewerIds, currentVolunteerName, isCurrentVolunteerAdmin, onDeleteOrder }) {
   const [search, setSearch] = useState("");
   const [deletingId, setDeletingId] = useState(null);
 
-  const reviewer = (volunteers || []).find((v) => v.id === reviewerId) || null;
-  const reviewerName = reviewer?.name || "";
-  const isReviewer = Boolean(reviewerName) && currentVolunteerName === reviewerName;
+  const reviewerNames = (volunteers || []).filter((v) => (reviewerIds || []).includes(v.id)).map((v) => v.name);
+  const isReviewer = reviewerNames.includes(currentVolunteerName);
   const canDelete = isReviewer || Boolean(isCurrentVolunteerAdmin);
 
   const completedOrders = useMemo(() => {

@@ -2,17 +2,21 @@ import React, { useState } from "react";
 import { Modal } from "./Modal";
 import { S } from "../styles";
 
-// Manage the volunteer roster, who's the designated Reviewer, and each
+const MAX_REVIEWERS = 4;
+const REQUIRED_REVIEWS = 2;
+
+// Manage the volunteer roster, who's a designated Reviewer (up to 4 —
+// any 2 of them reviewing an order is enough to advance it), and each
 // volunteer's permissions. Only visible to volunteers with the
 // "Manage Volunteers" permission.
 export function VolunteersPage({
   volunteers,
-  reviewerId,
+  reviewerIds,
   onAddVolunteer,
   onUpdateVolunteer,
   onDeleteVolunteer,
   onResetVolunteerPassword,
-  onSaveReviewerId,
+  onSaveReviewerIds,
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -20,8 +24,17 @@ export function VolunteersPage({
   const [perms, setPerms] = useState({ catalog: false, orders: false, volunteers: false });
   const [editingId, setEditingId] = useState(null);
 
-  const reviewer = volunteers.find((v) => v.id === reviewerId) || null;
+  const reviewers = volunteers.filter((v) => (reviewerIds || []).includes(v.id));
   const editing = volunteers.find((v) => v.id === editingId) || null;
+
+  function toggleReviewer(id) {
+    const current = reviewerIds || [];
+    if (current.includes(id)) {
+      onSaveReviewerIds(current.filter((rid) => rid !== id));
+    } else if (current.length < MAX_REVIEWERS) {
+      onSaveReviewerIds([...current, id]);
+    }
+  }
 
   async function handleAdd(e) {
     e.preventDefault();
@@ -36,8 +49,8 @@ export function VolunteersPage({
   async function handleRemove(v) {
     if (!window.confirm(`Remove ${v.name}? This can't be undone.`)) return;
     await onDeleteVolunteer(v.id);
-    if (v.id === reviewerId) {
-      await onSaveReviewerId("");
+    if ((reviewerIds || []).includes(v.id)) {
+      await onSaveReviewerIds(reviewerIds.filter((id) => id !== v.id));
     }
   }
 
@@ -49,21 +62,44 @@ export function VolunteersPage({
   return (
     <div>
       <div style={S.card}>
-        <h2 style={S.cardTitle}>Reviewer</h2>
-        <p style={S.tinyMuted}>This person must mark a request as reviewed before it can be assigned to be filled.</p>
-        <label style={S.fieldLabel}>
-          Reviewer
-          <select style={S.fieldInput} value={reviewerId || ""} onChange={(e) => onSaveReviewerId(e.target.value)}>
-            <option value="">Select…</option>
-            {volunteers.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {reviewer && (
-          <p style={S.tinyMuted}>Notifications for new requests will be emailed to {reviewer.email || "(no email on file)"}.</p>
+        <h2 style={S.cardTitle}>Reviewers</h2>
+        <p style={S.tinyMuted}>
+          Up to {MAX_REVIEWERS} volunteers can be set as reviewers. Any {REQUIRED_REVIEWS} of them reviewing a
+          request is enough to move it forward — the rest are optional backup, not required.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+          {volunteers.length === 0 ? (
+            <p style={S.tinyMuted}>Add a volunteer below first.</p>
+          ) : (
+            volunteers.map((v) => {
+              const checked = (reviewerIds || []).includes(v.id);
+              const disabled = !checked && (reviewerIds || []).length >= MAX_REVIEWERS;
+              return (
+                <label
+                  key={v.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 13,
+                    color: disabled ? "#bbb" : "#1a1a2e",
+                  }}
+                >
+                  <input type="checkbox" checked={checked} disabled={disabled} onChange={() => toggleReviewer(v.id)} />
+                  {v.name}
+                </label>
+              );
+            })
+          )}
+        </div>
+        {(reviewerIds || []).length >= MAX_REVIEWERS && (
+          <p style={S.tinyMuted}>Maximum of {MAX_REVIEWERS} reviewers reached — uncheck one to add another.</p>
+        )}
+        {reviewers.length > 0 && (
+          <p style={S.tinyMuted}>
+            Review-request emails go to:{" "}
+            {reviewers.map((v) => v.email || `${v.name} (no email on file)`).join(", ")}.
+          </p>
         )}
       </div>
 
@@ -103,7 +139,7 @@ export function VolunteersPage({
             <div key={v.id} style={volunteerRowStyle}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: "#1a1a2e" }}>
-                  {v.name} {v.id === reviewerId && <span style={reviewerBadgeStyle}>Reviewer</span>}
+                  {v.name} {(reviewerIds || []).includes(v.id) && <span style={reviewerBadgeStyle}>Reviewer</span>}
                 </div>
                 <div style={S.tinyMuted}>
                   {v.phone || "—"}

@@ -461,7 +461,7 @@ export function QrCodesPage({ items, updateItem }) {
       ) : (
         <div style={S.card}>
           {groupedFiltered.map((group) => {
-            const deptItemIds = group.items.map((it) => it.id);
+            const deptSelectedIds = group.items.filter((it) => selected[it.id]).map((it) => it.id);
             return (
               <div key={group.department} id={deptSlug(group.department)} className="qr-dept-section">
                 <div
@@ -476,13 +476,14 @@ export function QrCodesPage({ items, updateItem }) {
                     {group.department}
                   </span>
                   <button
-                    style={deptPrintBtnStyle}
+                    style={{ ...deptPrintBtnStyle, ...(deptSelectedIds.length === 0 ? S.btnDisabled : {}) }}
+                    disabled={deptSelectedIds.length === 0}
                     onClick={(e) => {
                       e.stopPropagation();
-                      printItemGroups(deptItemIds);
+                      printItemGroups(deptSelectedIds);
                     }}
                   >
-                    Print All in Group
+                    Print Selected{deptSelectedIds.length > 0 ? ` (${deptSelectedIds.length})` : ""}
                   </button>
                 </div>
                 <div className="dept-items-body" style={{ display: openDepts[group.department] ? "block" : "none" }}>

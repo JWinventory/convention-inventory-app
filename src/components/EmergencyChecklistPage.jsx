@@ -37,6 +37,9 @@ export function EmergencyChecklistPage({ items, orders }) {
       setPrintTarget(targetKey);
     });
     document.body.classList.add("printing-scoped");
+    // Forces that class change to apply synchronously too — flushSync
+    // above only covers the React-managed part.
+    void document.body.offsetHeight;
     window.print();
   }
 

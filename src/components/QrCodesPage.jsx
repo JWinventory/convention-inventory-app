@@ -591,8 +591,10 @@ export function QrCodesPage({ items, updateItem }) {
             display: block !important;
           }
           .qr-print-grid {
+            grid-template-columns: repeat(auto-fill, minmax(2in, 1fr)) !important;
             gap: 0.1in !important;
             margin-top: 0 !important;
+            justify-items: center;
           }
           .accordion-item {
             border-bottom: none !important;

@@ -27,6 +27,12 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn }) {
   // race, so print can fire immediately right after it.
   function printChecklist() {
     document.body.classList.add("print-mode-checklist");
+    // Reading a layout property forces the browser to apply the class
+    // change synchronously before we continue — without this, some
+    // browsers can defer it to the next paint, so print can fire using
+    // stale styles that still show the whole card instead of switching
+    // to the checklist.
+    void document.body.offsetHeight;
     window.print();
   }
 

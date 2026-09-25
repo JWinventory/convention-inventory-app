@@ -17,6 +17,8 @@ export function OrdersPage({
   drafts,
   items,
   onMarkReady,
+  onAssignFillers,
+  onResendFillerNotice,
   onCancelOrder,
   onCancelDraft,
   onUpdateDraftItems,
@@ -117,9 +119,12 @@ export function OrdersPage({
           currentVolunteerName={currentVolunteerName}
           canCancel={canCancel}
           onMarkReady={onMarkReady}
+          onAssignFillers={onAssignFillers}
+          onResendFillerNotice={onResendFillerNotice}
           onCancelOrder={onCancelOrder}
           onUpdateOrder={onUpdateOrder}
           onEditOrder={() => setEditingOrder(order)}
+          volunteers={volunteers}
         />
       ))}
 
@@ -165,10 +170,11 @@ export function OrdersPage({
   );
 }
 
-function OrderCard({ order, volunteerNames, reviewerNames, currentVolunteerName, canCancel, onMarkReady, onCancelOrder, onUpdateOrder, onEditOrder }) {
+function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVolunteerName, canCancel, onMarkReady, onAssignFillers, onResendFillerNotice, onCancelOrder, onUpdateOrder, onEditOrder }) {
   const [sending, setSending] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [pickedFillers, setPickedFillers] = useState(order.assignedFillers || []);
+  const [pointOfContactId, setPointOfContactId] = useState("");
 
   const reviewersConfigured = (reviewerNames || []).length > 0;
   const isReviewer = (reviewerNames || []).includes(currentVolunteerName);
@@ -194,19 +200,66 @@ function OrderCard({ order, volunteerNames, reviewerNames, currentVolunteerName,
     onUpdateOrder(order.id, patch);
   }
 
+  const [assigning, setAssigning] = useState(false);
+  const [resendVolunteerId, setResendVolunteerId] = useState("");
+  const [resending, setResending] = useState(false);
+
   function toggleFiller(name) {
     setPickedFillers((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
   }
 
-  function handleAssign() {
+  async function handleAssign() {
     if (pickedFillers.length === 0) return;
-    onUpdateOrder(order.id, { assignedFillers: pickedFillers, status: "assigned" });
+    setAssigning(true);
+    try {
+      await onAssignFillers(order, pickedFillers);
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  async function handleResend() {
+    if (!resendVolunteerId) return;
+    const volunteer = volunteers.find((v) => v.id === resendVolunteerId);
+    if (!volunteer) return;
+    setResending(true);
+    try {
+      await onResendFillerNotice(order, volunteer);
+      setResendVolunteerId("");
+    } finally {
+      setResending(false);
+    }
+  }
+
+  // Shown wherever fillers have already been assigned — lets staff
+  // pick any volunteer (already assigned or a swap-in) and resend the
+  // exact same order details to them, for a swap or a missed email.
+  function renderResendBlock() {
+    return (
+      <div style={{ marginTop: 10 }}>
+        <label style={S.fieldLabel}>
+          Resend to a volunteer (swap, or if they didn't receive it)
+          <select style={S.fieldInput} value={resendVolunteerId} onChange={(e) => setResendVolunteerId(e.target.value)}>
+            <option value="">Select a volunteer…</option>
+            {volunteers.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button style={S.secondaryBtn} disabled={!resendVolunteerId || resending} onClick={handleResend}>
+          {resending ? "Sending…" : "Resend Order Details"}
+        </button>
+      </div>
+    );
   }
 
   async function handleMarkReady() {
     setSending(true);
     try {
-      await onMarkReady(order);
+      const pointOfContact = volunteers.find((v) => v.id === pointOfContactId) || null;
+      await onMarkReady(order, pointOfContact);
     } finally {
       setSending(false);
     }
@@ -309,8 +362,8 @@ function OrderCard({ order, volunteerNames, reviewerNames, currentVolunteerName,
                   </label>
                 ))}
               </div>
-              <button style={S.primaryBtn} disabled={pickedFillers.length === 0} onClick={handleAssign}>
-                Assign to Fill
+              <button style={S.primaryBtn} disabled={pickedFillers.length === 0 || assigning} onClick={handleAssign}>
+                {assigning ? "Assigning…" : "Assign to Fill"}
               </button>
             </>
           )}
@@ -323,7 +376,19 @@ function OrderCard({ order, volunteerNames, reviewerNames, currentVolunteerName,
           <div style={S.tinyMuted}>
             Assigned to: <strong>{order.assignedFillers.join(", ")}</strong>
           </div>
-          <button style={{ ...S.primaryBtn, marginTop: 10 }} disabled={sending} onClick={handleMarkReady}>
+          {renderResendBlock()}
+          <label style={{ ...S.fieldLabel, marginTop: 10 }}>
+            Point of Contact (for pickup/drop-off — included in the ready email)
+            <select style={S.fieldInput} value={pointOfContactId} onChange={(e) => setPointOfContactId(e.target.value)}>
+              <option value="">Select a volunteer…</option>
+              {volunteers.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button style={{ ...S.primaryBtn, marginTop: 10 }} disabled={sending || !pointOfContactId} onClick={handleMarkReady}>
             {sending ? "Marking Ready…" : "Mark Ready & Notify Requester"}
           </button>
         </div>
@@ -335,7 +400,14 @@ function OrderCard({ order, volunteerNames, reviewerNames, currentVolunteerName,
           <div style={S.tinyMuted}>
             Reviewed by {order.reviewedBy.join(", ") || "—"} · Filled by {order.assignedFillers.join(", ") || "—"}
           </div>
+          {order.pointOfContactName && (
+            <div style={S.tinyMuted}>
+              Point of Contact: {order.pointOfContactName}
+              {order.pointOfContactPhone ? ` · ${order.pointOfContactPhone}` : ""}
+            </div>
+          )}
           <div style={{ ...S.tinyMuted, marginTop: 4 }}>Ready for pickup — waiting on the requester to check items back in.</div>
+          {renderResendBlock()}
         </div>
       )}
 

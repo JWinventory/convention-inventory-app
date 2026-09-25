@@ -424,10 +424,66 @@ export default function App() {
     return false;
   }
 
+  // Staff-side: resends the exact same filler notification to one
+  // volunteer — for a swap, or if the original just never arrived.
+  // Adds them to the order's filler list if they weren't already on it.
+  async function handleResendFillerNotice(order, volunteer) {
+    if (!volunteer) return;
+    const currentFillers = order.assignedFillers || [];
+    if (!currentFillers.includes(volunteer.name)) {
+      await updateOrder(order.id, { assignedFillers: [...currentFillers, volunteer.name] });
+    }
+    if (!volunteer.email) return;
+    try {
+      await fetch("/api/notify-filler", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fillerEmails: [volunteer.email],
+          requester: { name: order.requesterName, phone: order.requesterPhone },
+          eventType: order.eventType,
+          eventDate: order.eventDate,
+          pickupDate: order.pickupDate,
+          items: order.items,
+        }),
+      });
+    } catch (err) {
+      // Non-critical — staff can just try resending again.
+    }
+  }
+
+  // Staff-side: saves who's assigned to fill the order and emails each
+  // of them (silently skipped server-side for anyone without an email).
+  async function handleAssignFillers(order, fillerNames) {
+    await updateOrder(order.id, { assignedFillers: fillerNames, status: "assigned" });
+    const fillerEmails = fillerNames.map((name) => volunteers.find((v) => v.name === name)?.email).filter(Boolean);
+    if (fillerEmails.length === 0) return;
+    try {
+      await fetch("/api/notify-filler", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fillerEmails,
+          requester: { name: order.requesterName, phone: order.requesterPhone },
+          eventType: order.eventType,
+          eventDate: order.eventDate,
+          pickupDate: order.pickupDate,
+          items: order.items,
+        }),
+      });
+    } catch (err) {
+      // Assignment is already saved even if this email fails to send.
+    }
+  }
+
   // Staff-side: flips the order to "fulfilled" and emails the requester
   // (silently skipped server-side if they didn't leave an email).
-  async function handleMarkOrderReady(order) {
-    await updateOrderStatus(order.id, "fulfilled");
+  async function handleMarkOrderReady(order, pointOfContact) {
+    await updateOrder(order.id, {
+      status: "fulfilled",
+      pointOfContactName: pointOfContact?.name || "",
+      pointOfContactPhone: pointOfContact?.phone || "",
+    });
     try {
       await fetch("/api/notify-ready", {
         method: "POST",
@@ -436,6 +492,7 @@ export default function App() {
           requesterEmail: order.requesterEmail,
           requester: { name: order.requesterName, phone: order.requesterPhone },
           items: order.items,
+          pointOfContact: { name: pointOfContact?.name || "", phone: pointOfContact?.phone || "" },
         }),
       });
     } catch (err) {
@@ -583,6 +640,8 @@ export default function App() {
             seedIfEmpty={seedIfEmpty}
             syncStatus={syncStatus}
             onMarkReady={handleMarkOrderReady}
+            onAssignFillers={handleAssignFillers}
+            onResendFillerNotice={handleResendFillerNotice}
             onCancelOrder={handleCancelOrder}
             onUpdateOrderItems={handleUpdateOrderItems}
             onCancelDraft={handleCancelDraft}

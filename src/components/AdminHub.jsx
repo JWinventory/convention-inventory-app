@@ -25,6 +25,8 @@ export function AdminHub({
   seedIfEmpty,
   syncStatus,
   onMarkReady,
+  onAssignFillers,
+  onResendFillerNotice,
   onCancelOrder,
   onUpdateOrderItems,
   onCancelDraft,
@@ -135,6 +137,8 @@ export function AdminHub({
           drafts={drafts}
           items={items}
           onMarkReady={onMarkReady}
+          onAssignFillers={onAssignFillers}
+          onResendFillerNotice={onResendFillerNotice}
           onCancelOrder={onCancelOrder}
           onUpdateOrderItems={onUpdateOrderItems}
           onCancelDraft={onCancelDraft}

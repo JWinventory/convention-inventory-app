@@ -1,6 +1,6 @@
 // Vercel serverless function — emails the requester once their order
 // has been gathered and is ready for pickup. Reuses the same
-// RESEND_API_KEY already configured for api/notify.js.
+// RESEND_API_KEY already configured for the other notify endpoints.
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { requesterEmail, requester, items } = req.body || {};
+  const { requesterEmail, requester, items, pointOfContact } = req.body || {};
   if (!requester || !Array.isArray(items)) {
     res.status(400).json({ error: "Missing request details or item list." });
     return;
@@ -28,17 +28,105 @@ export default async function handler(req, res) {
     return;
   }
 
-  const itemLines = items.map((it) => `• ${it.name} × ${it.qty}`).join("\n");
-  const text = `Good news — your equipment request is ready for pickup!
+  // Basic HTML-escaping so a name, item, or note containing &, <, or >
+  // can never break the markup or inject anything into the email.
+  function esc(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[c]));
+  }
 
-Requester: ${requester.name || "—"}
-Phone: ${requester.phone || "—"}
+  const requesterName = requester.name || "—";
+  const requesterPhone = requester.phone || "—";
+  const hasPoc = Boolean(pointOfContact?.name);
 
-Items ready:
-${itemLines || "(none)"}
+  // --- Plain-text fallback (some inboxes/clients show this instead) ---
+  const itemLinesText = items.map((it) => `• ${it.name} × ${it.qty}`).join("\n");
+  const textLines = ["Good news — your equipment request is ready for pickup!", ""];
+  if (hasPoc) {
+    textLines.push(
+      `Please reach out to ${pointOfContact.name}${
+        pointOfContact.phone ? ` at ${pointOfContact.phone}` : ""
+      } to coordinate pick up and drop off of the items. He will also be your point of contact during your event in case you have other needs.`,
+      ""
+    );
+  }
+  textLines.push(
+    `Requester: ${requesterName}`,
+    `Phone: ${requesterPhone}`,
+    "",
+    "Items ready:",
+    itemLinesText || "(none)",
+    "",
+    "Please go to the inventory app to print out a check list for all items. After everything has been checked in on the checklist please return it with the items at drop off.",
+    "",
+    "Have a great assembly!",
+    "CEPC-Lubbock"
+  );
+  const text = textLines.join("\n");
 
-Once you've picked everything up and are ready to return it, scan each item's QR code in the app to check it back in.
-`;
+  // --- HTML version: A's clean, left-aligned structure + B's warm blue
+  // header band, rounded callout box, and checkmark item list. ---
+  const itemRowsHtml = items.map((it) => `✅ ${esc(it.name)} × ${esc(it.qty)}`).join("<br/>\n          ");
+
+  const pocBlockHtml = hasPoc
+    ? `
+      <tr><td style="padding: 16px 36px 0;">
+        <div style="background:#eaf3fc; border-radius:10px; padding:16px 18px; font-size:14px; color:#1a1a2e; line-height:1.6;">
+          Please coordinate your pickup and drop-off directly with <strong>${esc(pointOfContact.name)}</strong>${
+            pointOfContact.phone ? ` at <strong>${esc(pointOfContact.phone)}</strong>` : ""
+          }. He will also serve as your point of contact throughout the event for any additional needs.
+        </div>
+      </td></tr>`
+    : "";
+
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0; padding:0; background:#eef0f3;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#eef0f3; padding:24px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#fff; border-radius:4px; overflow:hidden; font-family: -apple-system, Helvetica, Arial, sans-serif;">
+        <tr><td style="background:#0072CE; padding: 22px 36px;">
+          <div style="font-size:15px; font-weight:800; color:#fff; letter-spacing:0.8px;">CEPC-LUBBOCK</div>
+        </td></tr>
+
+        <tr><td style="padding: 28px 36px 0;">
+          <div style="font-size:21px; font-weight:700; color:#1a1a2e;">Good news — your equipment request is ready for pickup!</div>
+        </td></tr>
+
+        <tr><td style="padding: 14px 36px 0; font-size:15px; color:#333; line-height:1.6;">
+          Hi ${esc(requesterName)},
+        </td></tr>
+        ${pocBlockHtml}
+        <tr><td style="padding: 26px 36px 0;">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#999; border-bottom:1px solid #eee; padding-bottom:6px;">Request Details</div>
+          <div style="font-size:14px; color:#333; padding-top:8px; line-height:1.6;">Requester: ${esc(requesterName)}<br/>Phone: ${esc(requesterPhone)}</div>
+        </td></tr>
+
+        <tr><td style="padding: 22px 36px 0;">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#999; border-bottom:1px solid #eee; padding-bottom:6px;">Items Ready</div>
+          <div style="font-size:14px; color:#333; padding-top:8px; line-height:1.9;">
+          ${itemRowsHtml || "(none)"}
+          </div>
+        </td></tr>
+
+        <tr><td style="padding: 26px 36px 0; font-size:14px; color:#333; line-height:1.6;">
+          Before returning the equipment, please print a check-in checklist from the inventory app and check off each item as it's returned. Include the completed checklist with the items at drop-off.
+        </td></tr>
+
+        <tr><td style="padding: 26px 36px 36px; font-size:14px; color:#333; line-height:1.6;">
+          Have a wonderful assembly!<br/><br/>
+          <span style="color:#0072CE; font-weight:800;">Warmly, CEPC-Lubbock Equipment Team</span>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 
   try {
     const resendRes = await fetch("https://api.resend.com/emails", {
@@ -51,6 +139,7 @@ Once you've picked everything up and are ready to return it, scan each item's QR
         from: "CEPC-Lubbock <alerts@notify.jw-inventory.com>",
         to: [requesterEmail],
         subject: "Your equipment request is ready!",
+        html,
         text,
       }),
     });

@@ -3,7 +3,6 @@ import { S, CAT_COLORS } from "./styles";
 import { Icon } from "./components/Icon";
 import { RequesterForm } from "./components/RequesterForm";
 import { ItemCard } from "./components/ItemCard";
-import { NotesSection } from "./components/NotesSection";
 import { CheckInScanModal } from "./components/CheckInScanModal";
 import { QrModal } from "./components/QrModal";
 import { Modal } from "./components/Modal";
@@ -97,7 +96,6 @@ export default function App() {
     items,
     orders,
     drafts,
-    notes,
     volunteers,
     volunteersReady,
     reviewerIds,
@@ -114,7 +112,6 @@ export default function App() {
     updateOrderStatus,
     updateOrder,
     deleteOrder,
-    saveNotes,
     addVolunteer,
     updateVolunteer,
     deleteVolunteer,
@@ -138,8 +135,6 @@ export default function App() {
   const [selections, setSelections] = useState({}); // { [itemId]: qty }
   const [submitEmail, setSubmitEmail] = useState("");
   const [submitNotes, setSubmitNotes] = useState("");
-  const [noteDraft, setNoteDraft] = useState(notes);
-  const [noteFlash, setNoteFlash] = useState(false);
   const [saveConfirm, setSaveConfirm] = useState(null); // { phone } | null — brief confirmation after Save
 
   // Measures the sticky header's actual rendered height, so the search
@@ -159,7 +154,6 @@ export default function App() {
 
   const [myOrderId, setMyOrderId] = useState(() => localStorage.getItem(MY_ORDER_KEY) || null);
 
-  useEffect(() => setNoteDraft(notes), [notes]);
 
   const categories = useMemo(() => {
     const known = Object.keys(CAT_COLORS);
@@ -197,12 +191,6 @@ export default function App() {
       })
       .filter(Boolean);
   }, [selections, items]);
-
-  function saveNote() {
-    saveNotes(noteDraft);
-    setNoteFlash(true);
-    setTimeout(() => setNoteFlash(false), 2000);
-  }
 
   // Removes an item from this static, local-only selection — nothing
   // to undo in Firestore, since nothing's been written there yet.
@@ -724,7 +712,20 @@ export default function App() {
               ))}
               {filteredItems.length === 0 && <div style={S.emptyState}>No items match your search.</div>}
             </div>
-            <NotesSection noteDraft={noteDraft} setNoteDraft={setNoteDraft} onSave={saveNote} flash={noteFlash} />
+            <section style={S.card}>
+              <h2 style={S.cardTitle}>Notes for This Request</h2>
+              <p style={S.tinyMuted}>
+                Anything the reviewer should know — special instructions, timing, damaged items you're aware
+                of, etc. This travels with your request and the reviewer will see it.
+              </p>
+              <textarea
+                style={S.textarea}
+                rows={3}
+                value={submitNotes}
+                onChange={(e) => setSubmitNotes(e.target.value)}
+                placeholder="Optional notes for this request…"
+              />
+            </section>
           </>
         )}
       </main>

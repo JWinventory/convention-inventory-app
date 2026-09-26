@@ -26,10 +26,9 @@ export function useInventory() {
   const [items, setItems] = useState([]);
   const [orders, setOrders] = useState([]);
   const [drafts, setDrafts] = useState([]);
-  const [notes, setNotes] = useState("");
   const [volunteers, setVolunteers] = useState([]);
   const [volunteersReady, setVolunteersReady] = useState(false);
-  const [reviewerIds, setReviewerIds] = useState([]); // up to 4 volunteer ids; 2 reviews required to advance an order
+  const [reviewerIds, setReviewerIds] = useState([]); // up to 4 volunteer ids; 1 review required to advance an order
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState("yellow"); // green | yellow | red
   const [ready, setReady] = useState(false);
@@ -105,7 +104,7 @@ export function useInventory() {
     return () => unsub();
   }, []);
 
-  // live shared settings: notes, and which volunteers are reviewers.
+  // live shared settings: which volunteers are reviewers.
   useEffect(() => {
     if (!firebaseConfigured) return;
     const ref = doc(db, META_DOC);
@@ -114,7 +113,6 @@ export function useInventory() {
       (snap) => {
         if (snap.exists()) {
           const d = snap.data();
-          setNotes(d.notes || "");
           setReviewerIds(Array.isArray(d.reviewerIds) ? d.reviewerIds : []);
         }
       },
@@ -347,16 +345,6 @@ export function useInventory() {
     }
   }, []);
 
-  const saveNotes = useCallback(async (text) => {
-    setSyncStatus("yellow");
-    try {
-      await setDoc(doc(db, META_DOC), { notes: text, updatedAt: serverTimestamp() }, { merge: true });
-      setSyncStatus("green");
-    } catch (e) {
-      setSyncStatus("red");
-    }
-  }, []);
-
   // Creates a new volunteer record (no password yet — they set their
   // own the first time they log in). Returns the new id.
   const addVolunteer = useCallback(async ({ name, phone, email, permissions }) => {
@@ -442,7 +430,6 @@ export function useInventory() {
     items,
     orders,
     drafts,
-    notes,
     volunteers,
     volunteersReady,
     reviewerIds,
@@ -461,7 +448,6 @@ export function useInventory() {
     updateOrderStatus,
     updateOrder,
     deleteOrder,
-    saveNotes,
     addVolunteer,
     updateVolunteer,
     deleteVolunteer,

@@ -129,7 +129,9 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn }) {
                   <tr key={idx}>
                     <td>{li.name}</td>
                     <td>
-                      <span className="checkin-blank-line" /> of {li.qty}
+                      <div className="checkin-qty-label">Quantity Ordered</div>
+                      <div className="checkin-qty-value">{li.qty}</div>
+                      <span className="checkin-blank-line" />
                     </td>
                     <td>
                       <span className="checkin-notes-line" />
@@ -167,10 +169,24 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn }) {
           text-transform: uppercase;
           color: #2471a3;
         }
+        .checkin-qty-label {
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          color: #999;
+        }
+        .checkin-qty-value {
+          font-size: 15px;
+          font-weight: 800;
+          color: #1a1a2e;
+          margin: 2px 0 6px;
+        }
         .checkin-blank-line {
           display: inline-block;
           border-bottom: 1px solid #999;
-          width: 50px;
+          width: 60px;
+          height: 14px;
         }
         .checkin-notes-line {
           display: inline-block;

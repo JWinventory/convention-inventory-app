@@ -488,6 +488,66 @@ export default function App() {
     }
   }
 
+  // Phase 3 complete: fired once (guarded by returnReviewStatus so a
+  // reopened, already-completed scanner doesn't re-fire) when every
+  // item on an order has been checked back in. Flags the order for
+  // return review and emails the reviewers, mirroring the "new
+  // request needs review" notice.
+  async function handleReturnCompleted(order) {
+    if (!order || order.returnReviewStatus) return;
+    await updateOrder(order.id, { returnReviewStatus: "needs-review", returnCompletedAtMs: Date.now() });
+
+    const reviewerEmails = reviewerIds
+      .map((id) => volunteers.find((v) => v.id === id)?.email)
+      .filter(Boolean)
+      .join(", ");
+    try {
+      const res = await fetch("/api/notify-return", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewerEmail: reviewerEmails,
+          requester: { name: order.requesterName, phone: order.requesterPhone },
+          items: order.items,
+        }),
+      });
+      if (!res.ok) {
+        console.error("notify-return failed:", res.status, await res.text());
+      }
+    } catch (err) {
+      // Order is already flagged even if the review-alert email fails to send.
+      console.error("notify-return request failed:", err);
+    }
+  }
+
+  // Staff-side: a Reviewer assigning a return action item to a
+  // volunteer — the assignment itself is already saved on the order by
+  // the time this runs; this just sends the volunteer their notice.
+  async function handleAssignActionItem(order, actionItem, volunteer, dueDate) {
+    if (!volunteer?.email) return;
+    try {
+      const res = await fetch("/api/notify-action-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          volunteerEmail: volunteer.email,
+          volunteerName: volunteer.name,
+          requester: { name: order.requesterName, phone: order.requesterPhone },
+          itemName: actionItem.itemName || "",
+          type: actionItem.type,
+          note: actionItem.note,
+          dueDate: dueDate || "",
+        }),
+      });
+      if (!res.ok) {
+        console.error("notify-action-item failed:", res.status, await res.text());
+      }
+    } catch (err) {
+      // Assignment is already saved even if this email fails to send.
+      console.error("notify-action-item request failed:", err);
+    }
+  }
+
   // Force-closes an order at any stage — even if nothing's actually
   // been filled or returned. Any of its items still checked out get
   // returned to available first (so catalog counts stay correct),
@@ -645,6 +705,7 @@ export default function App() {
             onSetVolunteerPassword={setVolunteerPassword}
             onSaveReviewerIds={saveReviewerIds}
             onUpdateOrder={updateOrder}
+            onAssignActionItem={handleAssignActionItem}
           />
         ) : myOrderPhase !== "none" ? (
           <MyOrderStatus
@@ -771,6 +832,7 @@ export default function App() {
           items={items}
           onResolveAction={(id, delta, note) => applyCheckChange(id, delta, requester.name, note)}
           onUpdateOrder={updateOrder}
+          onReturnCompleted={handleReturnCompleted}
           onClose={() => setCheckInScanOpen(false)}
         />
       )}

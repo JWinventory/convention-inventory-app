@@ -29,6 +29,7 @@ export function AdminHub({
   onAssignFillers,
   onResendFillerNotice,
   onResendReadyEmail,
+  onResendSubmittedEmail,
   onCancelOrder,
   onUpdateOrderItems,
   onCancelDraft,
@@ -144,6 +145,7 @@ export function AdminHub({
           onAssignFillers={onAssignFillers}
           onResendFillerNotice={onResendFillerNotice}
           onResendReadyEmail={onResendReadyEmail}
+          onResendSubmittedEmail={onResendSubmittedEmail}
           onCancelOrder={onCancelOrder}
           onUpdateOrderItems={onUpdateOrderItems}
           onCancelDraft={onCancelDraft}

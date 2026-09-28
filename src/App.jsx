@@ -488,6 +488,36 @@ export default function App() {
     }
   }
 
+  // Staff-side: resends the exact same "ready for pickup" email to the
+  // requester on a fulfilled order — for when they say they never got
+  // it, or just to double check. Reuses the point of contact already
+  // saved on the order from when it was first marked ready. Returns
+  // whether it actually went out, so the UI can tell the volunteer if
+  // there's no email on file rather than just claiming success.
+  async function handleResendReadyEmail(order) {
+    try {
+      const res = await fetch("/api/notify-ready", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requesterEmail: order.requesterEmail,
+          requester: { name: order.requesterName, phone: order.requesterPhone },
+          items: order.items,
+          pointOfContact: { name: order.pointOfContactName || "", phone: order.pointOfContactPhone || "" },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error("notify-ready resend failed:", res.status, data);
+        return { ok: false };
+      }
+      return { ok: true, skipped: data.skipped };
+    } catch (err) {
+      console.error("notify-ready resend request failed:", err);
+      return { ok: false };
+    }
+  }
+
   // Phase 3 complete: fired once (guarded by returnReviewStatus so a
   // reopened, already-completed scanner doesn't re-fire) when every
   // item on an order has been checked back in. Flags the order for
@@ -690,6 +720,7 @@ export default function App() {
             onMarkReady={handleMarkOrderReady}
             onAssignFillers={handleAssignFillers}
             onResendFillerNotice={handleResendFillerNotice}
+            onResendReadyEmail={handleResendReadyEmail}
             onCancelOrder={handleCancelOrder}
             onUpdateOrderItems={handleUpdateOrderItems}
             onCancelDraft={handleCancelDraft}

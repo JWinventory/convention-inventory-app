@@ -22,7 +22,7 @@ const PENDING_TIMEOUT_MS = 1200; // how long a detected code stays "in focus" wi
 // requires a short note before it'll proceed. Once everything's
 // checked in, the camera stops and a completion screen takes over
 // until the requester chooses to leave.
-export function CheckInScanModal({ order, lineItems, items, onResolveAction, onUpdateOrder, onClose }) {
+export function CheckInScanModal({ order, lineItems, items, onResolveAction, onUpdateOrder, onReturnCompleted, onClose }) {
   const [flash, setFlash] = useState(null); // { text, tone: "ok" | "error" } | null
   const [pendingScan, setPendingScan] = useState(null); // { code, name } | null — currently in focus
   const [capturing, setCapturing] = useState(false);
@@ -47,6 +47,7 @@ export function CheckInScanModal({ order, lineItems, items, onResolveAction, onU
   const lineItemsRef = useRef(lineItems);
   const itemsRef = useRef(items);
   const onResolveActionRef = useRef(onResolveAction);
+  const onReturnCompletedRef = useRef(onReturnCompleted);
   const lastProcessedRef = useRef({ code: null, at: 0 });
   const pendingLastSeenRef = useRef(0);
   const scannerInstanceRef = useRef(null);
@@ -55,7 +56,8 @@ export function CheckInScanModal({ order, lineItems, items, onResolveAction, onU
     lineItemsRef.current = lineItems;
     itemsRef.current = items;
     onResolveActionRef.current = onResolveAction;
-  }, [lineItems, items, onResolveAction]);
+    onReturnCompletedRef.current = onReturnCompleted;
+  }, [lineItems, items, onResolveAction, onReturnCompleted]);
 
   const remaining = lineItems.filter((li) => li.stillOut > 0);
   const allDone = lineItems.length > 0 && remaining.length === 0;
@@ -143,6 +145,7 @@ export function CheckInScanModal({ order, lineItems, items, onResolveAction, onU
     let cancelled = false;
     stopCamera().then(() => {
       if (!cancelled) setCompleted(true);
+      if (!cancelled && onReturnCompletedRef.current) onReturnCompletedRef.current(order);
     });
     return () => {
       cancelled = true;

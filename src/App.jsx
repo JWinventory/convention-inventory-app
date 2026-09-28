@@ -518,6 +518,41 @@ export default function App() {
     }
   }
 
+  // Staff-side: resends the original "your request has been submitted"
+  // confirmation — to the requester, the returner, or both (whichever
+  // the volunteer picks), plus any additional recipients typed in.
+  // Useful when someone says they never got the original confirmation,
+  // or staff want to loop someone else in on it.
+  async function handleResendSubmittedEmail(order, { includeRequester, includeReturner, extraEmails }) {
+    try {
+      const res = await fetch("/api/notify-submitted", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requesterEmail: includeRequester ? order.requesterEmail || "" : "",
+          returnerEmail: includeReturner ? order.returnerEmail || "" : "",
+          extraEmails: extraEmails || "",
+          requester: { name: order.requesterName, phone: order.requesterPhone },
+          returner: order.hasReturner ? { name: order.returnerName, phone: order.returnerPhone } : null,
+          eventType: order.eventType,
+          eventDate: order.eventDate,
+          pickupDate: order.pickupDate,
+          returnDate: order.returnDate,
+          items: order.items,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error("notify-submitted resend failed:", res.status, data);
+        return { ok: false };
+      }
+      return { ok: true, skipped: data.skipped };
+    } catch (err) {
+      console.error("notify-submitted resend request failed:", err);
+      return { ok: false };
+    }
+  }
+
   // Phase 3 complete: fired once (guarded by returnReviewStatus so a
   // reopened, already-completed scanner doesn't re-fire) when every
   // item on an order has been checked back in. Flags the order for
@@ -721,6 +756,7 @@ export default function App() {
             onAssignFillers={handleAssignFillers}
             onResendFillerNotice={handleResendFillerNotice}
             onResendReadyEmail={handleResendReadyEmail}
+            onResendSubmittedEmail={handleResendSubmittedEmail}
             onCancelOrder={handleCancelOrder}
             onUpdateOrderItems={handleUpdateOrderItems}
             onCancelDraft={handleCancelDraft}

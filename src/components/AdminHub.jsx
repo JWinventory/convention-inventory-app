@@ -6,6 +6,7 @@ import { OrderHistoryPage } from "./OrderHistoryPage";
 import { QrCodesPage } from "./QrCodesPage";
 import { EmergencyChecklistPage } from "./EmergencyChecklistPage";
 import { VolunteersPage } from "./VolunteersPage";
+import { ReturnReviewPage } from "./ReturnReviewPage";
 
 const SESSION_KEY = "volunteerSessionId";
 
@@ -42,6 +43,7 @@ export function AdminHub({
   onSetVolunteerPassword,
   onSaveReviewerIds,
   onUpdateOrder,
+  onAssignActionItem,
 }) {
   const [sessionId, setSessionId] = useState(() => sessionStorage.getItem(SESSION_KEY) || null);
   const [section, setSection] = useState(null);
@@ -92,6 +94,7 @@ export function AdminHub({
   const SECTIONS = [];
   if (currentVolunteer.permissions?.catalog) SECTIONS.push({ key: "catalog", label: "Catalog" });
   if (currentVolunteer.permissions?.orders) SECTIONS.push({ key: "orders", label: "Orders" });
+  if (currentVolunteer.permissions?.orders) SECTIONS.push({ key: "returns", label: "Returns" });
   SECTIONS.push({ key: "history", label: "History" });
   SECTIONS.push({ key: "qrcodes", label: "QR Codes" });
   SECTIONS.push({ key: "emergency", label: "Print Lists" });
@@ -148,6 +151,18 @@ export function AdminHub({
           currentVolunteerName={currentVolunteer.name}
           isCurrentVolunteerAdmin={Boolean(currentVolunteer.permissions?.volunteers)}
           onUpdateOrder={onUpdateOrder}
+        />
+      )}
+      {activeSection === "returns" && (
+        <ReturnReviewPage
+          orders={orders}
+          items={items}
+          volunteers={volunteers}
+          reviewerIds={reviewerIds}
+          currentVolunteerName={currentVolunteer.name}
+          isCurrentVolunteerAdmin={Boolean(currentVolunteer.permissions?.volunteers)}
+          onUpdateOrder={onUpdateOrder}
+          onAssignActionItem={onAssignActionItem}
         />
       )}
       {activeSection === "history" && (

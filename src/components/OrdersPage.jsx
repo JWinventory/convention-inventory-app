@@ -20,6 +20,7 @@ export function OrdersPage({
   onAssignFillers,
   onResendFillerNotice,
   onResendReadyEmail,
+  onResendSubmittedEmail,
   onCancelOrder,
   onCancelDraft,
   onUpdateDraftItems,
@@ -123,6 +124,7 @@ export function OrdersPage({
           onAssignFillers={onAssignFillers}
           onResendFillerNotice={onResendFillerNotice}
           onResendReadyEmail={onResendReadyEmail}
+          onResendSubmittedEmail={onResendSubmittedEmail}
           onCancelOrder={onCancelOrder}
           onUpdateOrder={onUpdateOrder}
           onEditOrder={() => setEditingOrder(order)}
@@ -172,11 +174,18 @@ export function OrdersPage({
   );
 }
 
-function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVolunteerName, canCancel, onMarkReady, onAssignFillers, onResendFillerNotice, onResendReadyEmail, onCancelOrder, onUpdateOrder, onEditOrder }) {
+function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVolunteerName, canCancel, onMarkReady, onAssignFillers, onResendFillerNotice, onResendReadyEmail, onResendSubmittedEmail, onCancelOrder, onUpdateOrder, onEditOrder }) {
   const [sending, setSending] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [resendingReady, setResendingReady] = useState(false);
   const [resendReadyFlash, setResendReadyFlash] = useState(null); // { text, tone: "ok" | "error" } | null
+
+  const [submittedResendOpen, setSubmittedResendOpen] = useState(false);
+  const [includeRequester, setIncludeRequester] = useState(Boolean(order.requesterEmail));
+  const [includeReturner, setIncludeReturner] = useState(Boolean(order.hasReturner && order.returnerEmail));
+  const [extraEmails, setExtraEmails] = useState("");
+  const [sendingSubmitted, setSendingSubmitted] = useState(false);
+  const [submittedFlash, setSubmittedFlash] = useState(null); // { text, tone: "ok" | "error" } | null
   const [pickedFillers, setPickedFillers] = useState(order.assignedFillers || []);
   const [pointOfContactId, setPointOfContactId] = useState("");
 
@@ -289,6 +298,32 @@ function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVo
     }
   }
 
+  // Resends the original "request submitted" confirmation — to the
+  // requester, the returner, or both (whichever checkboxes are on),
+  // plus anyone typed into the extra-recipients field.
+  async function handleResendSubmitted() {
+    const trimmedExtra = extraEmails.trim();
+    if (!includeRequester && !includeReturner && !trimmedExtra) return;
+    setSendingSubmitted(true);
+    setSubmittedFlash(null);
+    try {
+      const result = await onResendSubmittedEmail(order, {
+        includeRequester,
+        includeReturner,
+        extraEmails: trimmedExtra,
+      });
+      if (!result?.ok) {
+        setSubmittedFlash({ text: "Couldn't send — try again.", tone: "error" });
+      } else if (result.skipped === "no-email") {
+        setSubmittedFlash({ text: "No recipients — nothing on file and no extra email entered.", tone: "error" });
+      } else {
+        setSubmittedFlash({ text: "Sent!", tone: "ok" });
+      }
+    } finally {
+      setSendingSubmitted(false);
+    }
+  }
+
   return (
     <div style={S.card}>
       <div style={S.cardHeaderRow}>
@@ -340,6 +375,82 @@ function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVo
           <strong>Notes:</strong> {order.notes}
         </div>
       )}
+
+      {/* Resends the original "request submitted" confirmation — available
+          at any stage, not tied to a particular phase, since someone can
+          say they never got it whenever they happen to notice. */}
+      <div style={{ marginTop: 10 }}>
+        {!submittedResendOpen ? (
+          <button style={editLinkStyle} onClick={() => setSubmittedResendOpen(true)}>
+            Resend Confirmation Email
+          </button>
+        ) : (
+          <div style={{ background: "#f7f8fa", borderRadius: 8, padding: "10px 12px", marginTop: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#555", marginBottom: 8 }}>
+              Resend "Request Submitted" Confirmation
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 6 }}>
+              <input
+                type="checkbox"
+                checked={includeRequester}
+                disabled={!order.requesterEmail}
+                onChange={(e) => setIncludeRequester(e.target.checked)}
+              />
+              Requester{order.requesterEmail ? ` (${order.requesterEmail})` : " (no email on file)"}
+            </label>
+            {order.hasReturner && (
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={includeReturner}
+                  disabled={!order.returnerEmail}
+                  onChange={(e) => setIncludeReturner(e.target.checked)}
+                />
+                Returner{order.returnerEmail ? ` (${order.returnerEmail})` : " (no email on file)"}
+              </label>
+            )}
+            <label style={S.fieldLabel}>
+              Other recipients (optional, comma-separated)
+              <input
+                style={S.fieldInput}
+                value={extraEmails}
+                onChange={(e) => setExtraEmails(e.target.value)}
+                placeholder="name@example.com, another@example.com"
+              />
+            </label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                style={{ ...S.primaryBtn, marginTop: 0 }}
+                disabled={sendingSubmitted || (!includeRequester && !includeReturner && !extraEmails.trim())}
+                onClick={handleResendSubmitted}
+              >
+                {sendingSubmitted ? "Sending…" : "Send"}
+              </button>
+              <button
+                style={{ ...S.secondaryBtn, marginTop: 0 }}
+                onClick={() => {
+                  setSubmittedResendOpen(false);
+                  setSubmittedFlash(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+            {submittedFlash && (
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  marginTop: 8,
+                  color: submittedFlash.tone === "error" ? "#c0392b" : "#1e8449",
+                }}
+              >
+                {submittedFlash.text}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Phase 2, step 1: review — any 2 of the up-to-4 designated reviewers signing off advances the order */}
       {order.status === "submitted" && (

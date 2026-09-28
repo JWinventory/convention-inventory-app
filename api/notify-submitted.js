@@ -18,16 +18,32 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { requesterEmail, returnerEmail, requester, returner, eventType, eventDate, pickupDate, returnDate, items } =
-    req.body || {};
+  const {
+    requesterEmail,
+    returnerEmail,
+    extraEmails, // optional comma-separated string of additional recipients, for a manual resend
+    requester,
+    returner,
+    eventType,
+    eventDate,
+    pickupDate,
+    returnDate,
+    items,
+  } = req.body || {};
 
   if (!requester || !Array.isArray(items)) {
     res.status(400).json({ error: "Missing request details or item list." });
     return;
   }
 
-  // Either or both may have left an email — send to whichever did.
-  const recipients = [requesterEmail, returnerEmail]
+  const extraList = (extraEmails || "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+
+  // Either or both of requester/returner may have left an email — send
+  // to whichever did, plus anyone typed in as an extra recipient.
+  const recipients = [requesterEmail, returnerEmail, ...extraList]
     .map((e) => (e || "").trim())
     .filter(Boolean)
     .filter((e, i, arr) => arr.indexOf(e) === i); // de-dupe if they match

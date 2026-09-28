@@ -19,6 +19,7 @@ export function OrdersPage({
   onMarkReady,
   onAssignFillers,
   onResendFillerNotice,
+  onResendReadyEmail,
   onCancelOrder,
   onCancelDraft,
   onUpdateDraftItems,
@@ -121,6 +122,7 @@ export function OrdersPage({
           onMarkReady={onMarkReady}
           onAssignFillers={onAssignFillers}
           onResendFillerNotice={onResendFillerNotice}
+          onResendReadyEmail={onResendReadyEmail}
           onCancelOrder={onCancelOrder}
           onUpdateOrder={onUpdateOrder}
           onEditOrder={() => setEditingOrder(order)}
@@ -170,9 +172,11 @@ export function OrdersPage({
   );
 }
 
-function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVolunteerName, canCancel, onMarkReady, onAssignFillers, onResendFillerNotice, onCancelOrder, onUpdateOrder, onEditOrder }) {
+function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVolunteerName, canCancel, onMarkReady, onAssignFillers, onResendFillerNotice, onResendReadyEmail, onCancelOrder, onUpdateOrder, onEditOrder }) {
   const [sending, setSending] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [resendingReady, setResendingReady] = useState(false);
+  const [resendReadyFlash, setResendReadyFlash] = useState(null); // { text, tone: "ok" | "error" } | null
   const [pickedFillers, setPickedFillers] = useState(order.assignedFillers || []);
   const [pointOfContactId, setPointOfContactId] = useState("");
 
@@ -262,6 +266,26 @@ function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVo
       await onMarkReady(order, pointOfContact);
     } finally {
       setSending(false);
+    }
+  }
+
+  // For when a requester says they never got the "ready for pickup"
+  // email, or staff just want to double check — resends the exact same
+  // notice using the point of contact already on file for this order.
+  async function handleResendReady() {
+    setResendingReady(true);
+    setResendReadyFlash(null);
+    try {
+      const result = await onResendReadyEmail(order);
+      if (!result?.ok) {
+        setResendReadyFlash({ text: "Couldn't send — try again.", tone: "error" });
+      } else if (result.skipped === "no-email") {
+        setResendReadyFlash({ text: "No email on file for this requester.", tone: "error" });
+      } else {
+        setResendReadyFlash({ text: "Sent!", tone: "ok" });
+      }
+    } finally {
+      setResendingReady(false);
     }
   }
 
@@ -407,6 +431,21 @@ function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVo
             </div>
           )}
           <div style={{ ...S.tinyMuted, marginTop: 4 }}>Ready for pickup — waiting on the requester to check items back in.</div>
+          <button style={{ ...S.secondaryBtn, marginTop: 10 }} disabled={resendingReady} onClick={handleResendReady}>
+            {resendingReady ? "Sending…" : "Resend Ready Email to Requester"}
+          </button>
+          {resendReadyFlash && (
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                marginTop: 6,
+                color: resendReadyFlash.tone === "error" ? "#c0392b" : "#1e8449",
+              }}
+            >
+              {resendReadyFlash.text}
+            </div>
+          )}
           {renderResendBlock()}
         </div>
       )}

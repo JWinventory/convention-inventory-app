@@ -127,7 +127,9 @@ export function EmergencyChecklistPage({ items, orders }) {
                       <tr key={idx}>
                         <td style={tdStyle}>{li.name}</td>
                         <td style={tdStyle}>
-                          <span style={blankLineStyle} /> of {li.qty}
+                          <div style={qtyLabelStyle}>Quantity Ordered</div>
+                          <div style={qtyValueStyle}>{li.qty}</div>
+                          <span style={blankLineStyle} />
                         </td>
                         <td style={tdStyle}>
                           <span style={notesLineStyle} />
@@ -179,7 +181,9 @@ export function EmergencyChecklistPage({ items, orders }) {
                     <tr key={item.id}>
                       <td style={tdStyle}>{item.name}</td>
                       <td style={tdStyle}>
-                        <span style={blankLineStyle} /> of {item.total}
+                        <div style={qtyLabelStyle}>Total Qty</div>
+                        <div style={qtyValueStyle}>{item.total}</div>
+                        <span style={blankLineStyle} />
                       </td>
                       <td style={tdStyle}>
                         <span style={notesLineStyle} />
@@ -254,10 +258,26 @@ const deptSeparatorStyle = {
   borderTop: "3px solid #999",
 };
 
+const qtyLabelStyle = {
+  fontSize: 9,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: 0.3,
+  color: "#999",
+};
+
+const qtyValueStyle = {
+  fontSize: 15,
+  fontWeight: 800,
+  color: "#1a1a2e",
+  margin: "2px 0 6px",
+};
+
 const blankLineStyle = {
   display: "inline-block",
   borderBottom: "1px solid #999",
-  width: 50,
+  width: 60,
+  height: 14,
 };
 
 const notesLineStyle = {

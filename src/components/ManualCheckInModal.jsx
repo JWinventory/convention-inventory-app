@@ -24,9 +24,15 @@ function makeId() {
 // on the order, the same list a Reviewer works from once it shows up
 // on the Returns tab, so a missing item never just quietly disappears.
 export function ManualCheckInModal({ order, lineItems, items, onResolveAction, onUpdateOrder, onReturnCompleted, onClose }) {
+  // Only items that still have something outstanding belong in this
+  // form — an item already fully checked in (via QR, or earlier in
+  // this same session) has nothing left to enter and would otherwise
+  // show up as a confusing, unfillable "0 of 0" row.
+  const pendingItems = lineItems.filter((li) => li.stillOut > 0);
+
   const [quantities, setQuantities] = useState(() => {
     const init = {};
-    for (const li of lineItems) init[li.name] = String(li.stillOut);
+    for (const li of pendingItems) init[li.name] = String(li.stillOut);
     return init;
   });
   const [notes, setNotes] = useState({});
@@ -76,7 +82,7 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
 
     // Every field has to be a valid whole number in range before
     // anything gets submitted.
-    for (const li of lineItems) {
+    for (const li of pendingItems) {
       const raw = quantities[li.name];
       const entered = Number(raw);
       if (
@@ -92,7 +98,7 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
       }
     }
 
-    const mismatched = lineItems.filter((li) => Number(quantities[li.name]) !== li.stillOut);
+    const mismatched = pendingItems.filter((li) => Number(quantities[li.name]) !== li.stillOut);
     const missingNotes = mismatched.filter((li) => !(notes[li.name] || "").trim());
     if (missingNotes.length > 0) {
       setError(`Add a note explaining the difference for: ${missingNotes.map((li) => li.name).join(", ")}.`);
@@ -102,7 +108,7 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
     setSubmitting(true);
     try {
       const newActionItems = [];
-      for (const li of lineItems) {
+      for (const li of pendingItems) {
         const liveItem = itemsRef.current.find((i) => i.name === li.name);
         if (!liveItem) continue;
         const mismatch = mismatched.some((m) => m.name === li.name);
@@ -160,6 +166,23 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
     );
   }
 
+  if (pendingItems.length === 0) {
+    return (
+      <Modal onClose={onClose} title="Check In — Enter Quantities">
+        <div style={S.successBox}>
+          <div style={S.successCheck}>
+            <Icon.check size={28} />
+          </div>
+          <div style={S.successTitle}>Nothing left to check in!</div>
+          <div style={S.tinyMuted}>Every item on this order has already been checked in.</div>
+          <button style={{ ...S.primaryBtn, marginTop: 16 }} onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal onClose={onClose} title="Check In — Enter Quantities">
       <p style={S.modalHint}>
@@ -169,7 +192,7 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
 
       {error && <div style={S.errorText}>{error}</div>}
 
-      {groupByDepartment(lineItems).map((group) => (
+      {groupByDepartment(pendingItems).map((group) => (
         <div key={group.department} style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", color: "#888", margin: "8px 0 4px" }}>
             {group.department}

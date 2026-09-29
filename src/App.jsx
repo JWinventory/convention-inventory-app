@@ -4,6 +4,7 @@ import { Icon } from "./components/Icon";
 import { RequesterForm } from "./components/RequesterForm";
 import { ItemCard } from "./components/ItemCard";
 import { CheckInScanModal } from "./components/CheckInScanModal";
+import { ManualCheckInModal } from "./components/ManualCheckInModal";
 import { QrModal } from "./components/QrModal";
 import { Modal } from "./components/Modal";
 import { OrderReviewPage } from "./components/OrderReviewPage";
@@ -125,6 +126,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
   const [checkInScanOpen, setCheckInScanOpen] = useState(false);
+  const [manualCheckInOpen, setManualCheckInOpen] = useState(false);
   const [qrItem, setQrItem] = useState(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [myDraftId, setMyDraftId] = useState(() => localStorage.getItem(MY_DRAFT_KEY) || null);
@@ -250,10 +252,13 @@ export default function App() {
     }
   }, [myOrder, myOrderPhase]);
 
-  // If the order finishes while the check-in scanner happens to still be
+  // If the order finishes while a check-in modal happens to still be
   // open for some reason, make sure it closes too.
   useEffect(() => {
-    if (myOrderPhase !== "ready") setCheckInScanOpen(false);
+    if (myOrderPhase !== "ready") {
+      setCheckInScanOpen(false);
+      setManualCheckInOpen(false);
+    }
   }, [myOrderPhase]);
 
   async function handleOrderCreated(order) {
@@ -780,6 +785,7 @@ export default function App() {
             lineItems={myLineItems}
             phase={myOrderPhase}
             onScanCheckIn={() => setCheckInScanOpen(true)}
+            onManualCheckIn={() => setManualCheckInOpen(true)}
           />
         ) : reviewOpen ? (
           <OrderReviewPage
@@ -901,6 +907,17 @@ export default function App() {
           onUpdateOrder={updateOrder}
           onReturnCompleted={handleReturnCompleted}
           onClose={() => setCheckInScanOpen(false)}
+        />
+      )}
+      {manualCheckInOpen && myOrder && (
+        <ManualCheckInModal
+          order={myOrder}
+          lineItems={myLineItems}
+          items={items}
+          onResolveAction={(id, delta, note) => applyCheckChange(id, delta, requester.name, note)}
+          onUpdateOrder={updateOrder}
+          onReturnCompleted={handleReturnCompleted}
+          onClose={() => setManualCheckInOpen(false)}
         />
       )}
       {qrItem && <QrModal item={qrItem} onClose={() => setQrItem(null)} />}

@@ -116,24 +116,24 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn, onManual
           <thead>
             <tr>
               <th>Item</th>
-              <th style={{ width: 110 }}>Returned</th>
-              <th style={{ width: "35%" }}>Notes</th>
+              <th style={{ width: 80, textAlign: "center" }}>Requested</th>
+              <th style={{ width: 90, textAlign: "center" }}>Returned</th>
+              <th style={{ width: "30%" }}>Notes</th>
             </tr>
           </thead>
           <tbody>
             {groups.map((group) => (
               <React.Fragment key={group.department}>
                 <tr>
-                  <td colSpan={3} className="checkin-dept-row">
+                  <td colSpan={4} className="checkin-dept-row">
                     {group.department}
                   </td>
                 </tr>
                 {group.items.map((li, idx) => (
                   <tr key={idx}>
                     <td>{li.name}</td>
-                    <td>
-                      <div className="checkin-qty-label">Quantity Ordered</div>
-                      <div className="checkin-qty-value">{li.qty}</div>
+                    <td style={{ textAlign: "center", fontWeight: 700 }}>{li.qty}</td>
+                    <td style={{ textAlign: "center" }}>
                       <span className="checkin-blank-line" />
                     </td>
                     <td>
@@ -171,19 +171,6 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn, onManual
           font-size: 12px;
           text-transform: uppercase;
           color: #2471a3;
-        }
-        .checkin-qty-label {
-          font-size: 9px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.3px;
-          color: #999;
-        }
-        .checkin-qty-value {
-          font-size: 15px;
-          font-weight: 800;
-          color: #1a1a2e;
-          margin: 2px 0 6px;
         }
         .checkin-blank-line {
           display: inline-block;

@@ -8,10 +8,12 @@ import { S } from "../styles";
 //      pull sheet, printable on its own.
 //   2. The full catalog checklist, grouped by department, for a general
 //      paper backup of everything in inventory.
-// Both use a count-based checklist format, grouped by department: a
-// blank "Returned: ___ of N" line per item plus a Notes line, rather
-// than a single checkbox — this scales cleanly to any quantity and
-// leaves room to note anything damaged or missing.
+// Both use a count-based checklist format, grouped by department, with
+// the quantity split into its own two columns — Requested (or Total,
+// on the full catalog list) and a blank Returned column to fill in by
+// hand — plus a Notes column, rather than a single checkbox. This
+// scales cleanly to any quantity and leaves room to note anything
+// damaged or missing.
 // "Print This List" / "Print Checklist" only print the one block clicked —
 // everything else is hidden from the print output via the printing-scoped
 // body class below, regardless of how many order sections exist.
@@ -111,24 +113,24 @@ export function EmergencyChecklistPage({ items, orders }) {
               <thead>
                 <tr>
                   <th style={thStyle}>Item</th>
-                  <th style={{ ...thStyle, width: 110 }}>Returned</th>
-                  <th style={{ ...thStyle, width: "35%" }}>Notes</th>
+                  <th style={{ ...thStyle, width: 80, textAlign: "center" }}>Requested</th>
+                  <th style={{ ...thStyle, width: 90, textAlign: "center" }}>Returned</th>
+                  <th style={{ ...thStyle, width: "30%" }}>Notes</th>
                 </tr>
               </thead>
               <tbody>
                 {groupOrderItemsByDept(order).map((group, groupIdx) => (
                   <React.Fragment key={group.department}>
                     <tr>
-                      <td colSpan={3} style={{ ...deptRowStyle, ...(groupIdx > 0 ? deptSeparatorStyle : {}) }}>
+                      <td colSpan={4} style={{ ...deptRowStyle, ...(groupIdx > 0 ? deptSeparatorStyle : {}) }}>
                         {group.department}
                       </td>
                     </tr>
                     {group.items.map((li, idx) => (
                       <tr key={idx}>
                         <td style={tdStyle}>{li.name}</td>
-                        <td style={tdStyle}>
-                          <div style={qtyLabelStyle}>Quantity Ordered</div>
-                          <div style={qtyValueStyle}>{li.qty}</div>
+                        <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700 }}>{li.qty}</td>
+                        <td style={{ ...tdStyle, textAlign: "center" }}>
                           <span style={blankLineStyle} />
                         </td>
                         <td style={tdStyle}>
@@ -165,24 +167,24 @@ export function EmergencyChecklistPage({ items, orders }) {
             <thead>
               <tr>
                 <th style={thStyle}>Item</th>
-                <th style={{ ...thStyle, width: 110 }}>Returned</th>
-                <th style={{ ...thStyle, width: "35%" }}>Notes</th>
+                <th style={{ ...thStyle, width: 80, textAlign: "center" }}>Total</th>
+                <th style={{ ...thStyle, width: 90, textAlign: "center" }}>Returned</th>
+                <th style={{ ...thStyle, width: "30%" }}>Notes</th>
               </tr>
             </thead>
             <tbody>
               {groups.map((group, groupIdx) => (
                 <React.Fragment key={group.department}>
                   <tr>
-                    <td colSpan={3} style={{ ...deptRowStyle, ...(groupIdx > 0 ? deptSeparatorStyle : {}) }}>
+                    <td colSpan={4} style={{ ...deptRowStyle, ...(groupIdx > 0 ? deptSeparatorStyle : {}) }}>
                       {group.department}
                     </td>
                   </tr>
                   {group.items.map((item) => (
                     <tr key={item.id}>
                       <td style={tdStyle}>{item.name}</td>
-                      <td style={tdStyle}>
-                        <div style={qtyLabelStyle}>Total Qty</div>
-                        <div style={qtyValueStyle}>{item.total}</div>
+                      <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700 }}>{item.total}</td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
                         <span style={blankLineStyle} />
                       </td>
                       <td style={tdStyle}>
@@ -256,21 +258,6 @@ const deptRowStyle = {
 
 const deptSeparatorStyle = {
   borderTop: "3px solid #999",
-};
-
-const qtyLabelStyle = {
-  fontSize: 9,
-  fontWeight: 700,
-  textTransform: "uppercase",
-  letterSpacing: 0.3,
-  color: "#999",
-};
-
-const qtyValueStyle = {
-  fontSize: 15,
-  fontWeight: 800,
-  color: "#1a1a2e",
-  margin: "2px 0 6px",
 };
 
 const blankLineStyle = {

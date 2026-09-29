@@ -13,7 +13,7 @@ import { S } from "../styles";
 // items back in by department — using the exact same proven print
 // mechanism as the admin Print Lists page, so the two are guaranteed
 // to behave identically.
-export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn }) {
+export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn, onManualCheckIn }) {
   const allDone = lineItems.length > 0 && lineItems.every((li) => li.stillOut === 0);
   const [checklistActive, setChecklistActive] = useState(false);
 
@@ -94,6 +94,9 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn }) {
         <>
           <button style={S.primaryBtn} onClick={onScanCheckIn}>
             Scan QR to Check In
+          </button>
+          <button className="no-print" style={{ ...S.secondaryBtn, marginTop: 8 }} onClick={onManualCheckIn}>
+            Enter Quantities to Check In
           </button>
           <button className="no-print" style={{ ...S.secondaryBtn, marginTop: 8 }} onClick={printChecklist}>
             Print Check-In Checklist

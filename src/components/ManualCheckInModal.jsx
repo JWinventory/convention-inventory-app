@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Modal } from "./Modal";
 import { Icon } from "./Icon";
+import { ImageCarousel } from "./ImageCarousel";
+import { Lightbox } from "./Lightbox";
+import { getItemImages } from "../imageUtils";
 import { S } from "../styles";
 
 function makeId() {
@@ -30,6 +33,7 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [lightbox, setLightbox] = useState(null); // { images, index } | null
 
   const itemsRef = useRef(items);
   const onResolveActionRef = useRef(onResolveAction);
@@ -172,6 +176,8 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
           </div>
           {group.items.map((li) => {
             const mismatch = isMismatch(li);
+            const catalogItem = items.find((i) => i.name === li.name);
+            const images = getItemImages(catalogItem);
             return (
               <div
                 key={li.name}
@@ -182,8 +188,15 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
                   marginBottom: 8,
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>{li.name}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={thumbWrapStyle}>
+                    <ImageCarousel
+                      images={images}
+                      alt={li.name}
+                      onEnlarge={(imgs, idx) => setLightbox({ images: imgs, index: idx })}
+                    />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>{li.name}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 0 auto" }}>
                     <input
                       type="number"
@@ -219,6 +232,22 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
       <button style={S.primaryBtn} disabled={submitting} onClick={handleComplete}>
         {submitting ? "Checking In…" : "Complete Check-In"}
       </button>
+
+      {lightbox && (
+        <Lightbox images={lightbox.images} initialIndex={lightbox.index} onClose={() => setLightbox(null)} />
+      )}
     </Modal>
   );
 }
+
+const thumbWrapStyle = {
+  width: 52,
+  height: 52,
+  borderRadius: 8,
+  overflow: "hidden",
+  background: "#f0f1f4",
+  flex: "0 0 auto",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};

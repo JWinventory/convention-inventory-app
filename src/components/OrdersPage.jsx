@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { S } from "../styles";
 import { EditOrderModal } from "./EditOrderModal";
 
@@ -170,6 +171,25 @@ export function OrdersPage({
           onClose={() => setEditingDraft(null)}
         />
       )}
+
+      <style>{`
+        @media print {
+          body.order-printing-scoped * { visibility: hidden; }
+          body.order-printing-scoped .order-print-active,
+          body.order-printing-scoped .order-print-active * { visibility: visible; }
+          body.order-printing-scoped .order-print-active {
+            display: block !important;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          .order-print-table th, .order-print-table td {
+            border: 1px solid #999;
+            padding: 6px 8px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -179,6 +199,31 @@ function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVo
   const [cancelling, setCancelling] = useState(false);
   const [resendingReady, setResendingReady] = useState(false);
   const [resendReadyFlash, setResendReadyFlash] = useState(null); // { text, tone: "ok" | "error" } | null
+
+  const [printing, setPrinting] = useState(false);
+
+  useEffect(() => {
+    function handleAfterPrint() {
+      document.body.classList.remove("order-printing-scoped");
+      setPrinting(false);
+    }
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => window.removeEventListener("afterprint", handleAfterPrint);
+  }, []);
+
+  // Same scoped-print mechanism used on the Print Lists page: flushSync
+  // makes sure the print-only block is actually in the DOM before we
+  // call print(), so staff can grab a standalone copy of just this one
+  // order — handy to keep on file, hand off, or print for someone
+  // without app access.
+  function handlePrintOrder() {
+    flushSync(() => {
+      setPrinting(true);
+    });
+    document.body.classList.add("order-printing-scoped");
+    void document.body.offsetHeight;
+    window.print();
+  }
 
   const [submittedResendOpen, setSubmittedResendOpen] = useState(false);
   const [includeRequester, setIncludeRequester] = useState(Boolean(order.requesterEmail));
@@ -561,10 +606,15 @@ function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVo
         </div>
       )}
 
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <button style={editLinkStyle} onClick={onEditOrder}>
-          Edit Items
-        </button>
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          <button style={editLinkStyle} onClick={onEditOrder}>
+            Edit Items
+          </button>
+          <button style={editLinkStyle} onClick={handlePrintOrder}>
+            Print / Download Order
+          </button>
+        </div>
         {canCancel ? (
           <button style={cancelLinkStyle} disabled={cancelling} onClick={handleCancel}>
             {cancelling ? "Cancelling…" : "Cancel & Archive Order"}
@@ -572,6 +622,53 @@ function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVo
         ) : (
           <span style={{ ...S.tinyMuted, fontSize: 11 }}>Only the reviewer or an admin can cancel this order.</span>
         )}
+      </div>
+
+      {/* Standalone printable copy of just this order — hidden on
+          screen, only rendered into the print output when this card's
+          own Print/Download button was the one clicked (see the
+          body.order-printing-scoped rules at the bottom of the page). */}
+      <div className={"order-print-block" + (printing ? " order-print-active" : "")} style={{ display: "none" }}>
+        <h2 style={{ marginBottom: 4 }}>{order.requesterName || "Unnamed requester"}</h2>
+        <p style={{ fontSize: 12, color: "#666", marginTop: 0 }}>
+          {order.requesterPhone || "—"}
+          {order.requesterEmail ? ` · ${order.requesterEmail}` : ""}
+          <br />
+          {order.circuit || "—"} · {order.eventType || "—"} · Event {order.eventDate || "—"} · Pickup{" "}
+          {order.pickupDate || "—"} · Return {order.returnDate || "—"}
+        </p>
+        {order.hasReturner && (
+          <p style={{ fontSize: 12, color: "#666", marginTop: 0 }}>
+            <strong>Returning:</strong> {order.returnerName || "—"}
+            {order.returnerPhone ? ` · ${order.returnerPhone}` : ""}
+            {order.returnerEmail ? ` · ${order.returnerEmail}` : ""}
+            {order.returnerCircuit ? ` · ${order.returnerCircuit}` : ""}
+          </p>
+        )}
+        {order.notes && (
+          <p style={{ fontSize: 12, color: "#666" }}>
+            <strong>Notes:</strong> {order.notes}
+          </p>
+        )}
+        <table className="order-print-table" style={printTableStyle}>
+          <thead>
+            <tr>
+              <th style={printThStyle}>Item</th>
+              <th style={{ ...printThStyle, width: 90, textAlign: "center" }}>Requested</th>
+            </tr>
+          </thead>
+          <tbody>
+            {order.lineItems.map((li, idx) => (
+              <tr key={idx}>
+                <td style={printTdStyle}>
+                  {li.name}
+                  {!li.exists && " (item no longer in catalog)"}
+                </td>
+                <td style={{ ...printTdStyle, textAlign: "center", fontWeight: 700 }}>{li.qty}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -704,4 +801,29 @@ const cancelLinkStyle = {
   fontWeight: 700,
   cursor: "pointer",
   padding: 0,
+};
+
+const printTableStyle = {
+  width: "100%",
+  borderCollapse: "collapse",
+  marginTop: 10,
+  background: "#fff",
+  borderRadius: 8,
+  overflow: "hidden",
+};
+
+const printThStyle = {
+  textAlign: "left",
+  fontSize: 12,
+  textTransform: "uppercase",
+  color: "#999",
+  padding: "8px 10px",
+  borderBottom: "2px solid #eee",
+};
+
+const printTdStyle = {
+  fontSize: 13,
+  padding: "8px 10px",
+  borderBottom: "1px solid #eee",
+  color: "#1a1a2e",
 };

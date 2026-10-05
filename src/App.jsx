@@ -19,6 +19,22 @@ import { firebaseConfigured } from "./firebase";
 const MY_ORDER_KEY = "convention-inventory-my-order-id";
 const MY_DRAFT_KEY = "convention-inventory-my-draft-id";
 
+// Every Request Details field has to be filled in before Save is
+// clickable — and if "someone else will be returning the items" is
+// checked, that contact's fields count too. Item picks aren't part of
+// this check: a draft can still be saved with just contact info and no
+// items yet, same as before.
+function isContactInfoComplete(r) {
+  const requiredFields = ["name", "phone", "eventType", "circuit", "eventDate", "pickupDate", "returnDate"];
+  const requesterOk = requiredFields.every((f) => String(r[f] || "").trim() !== "");
+  if (!requesterOk) return false;
+  if (r.hasReturner) {
+    const returnerFields = ["returnerName", "returnerPhone", "returnerEmail", "returnerCircuit"];
+    return returnerFields.every((f) => String(r[f] || "").trim() !== "");
+  }
+  return true;
+}
+
 function defaultRequester() {
   return {
     name: "",
@@ -194,6 +210,8 @@ export default function App() {
       .filter(Boolean);
   }, [selections, items]);
 
+  const contactInfoComplete = isContactInfoComplete(requester);
+
   // Removes an item from this static, local-only selection — nothing
   // to undo in Firestore, since nothing's been written there yet.
   function handleRemoveFromOrder(item) {
@@ -243,23 +261,23 @@ export default function App() {
   }, [myOrder, myLineItems]);
 
   // Once every item on "my" order is checked back in, stop tracking it
-  // so the screen unlocks and is ready for a new request.
+  // so the screen unlocks and is ready for a new request. Held off
+  // while a check-in modal is still open: both CheckInScanModal and
+  // ManualCheckInModal detect "everything's done" themselves and show
+  // their own success screen, which the requester dismisses with its
+  // own Close/Return button (calling onClose, which clears
+  // checkInScanOpen/manualCheckInOpen below). If this effect reset
+  // things immediately instead of waiting for that, it would yank the
+  // modal out from under itself the instant the last item posts —
+  // mid-submit for the manual flow — before that success screen (or,
+  // for manual entry, the check-in write itself) ever gets to finish.
   useEffect(() => {
-    if (myOrder && myOrderPhase === "none") {
+    if (myOrder && myOrderPhase === "none" && !checkInScanOpen && !manualCheckInOpen) {
       localStorage.removeItem(MY_ORDER_KEY);
       setMyOrderId(null);
       setReviewOpen(false);
     }
-  }, [myOrder, myOrderPhase]);
-
-  // If the order finishes while a check-in modal happens to still be
-  // open for some reason, make sure it closes too.
-  useEffect(() => {
-    if (myOrderPhase !== "ready") {
-      setCheckInScanOpen(false);
-      setManualCheckInOpen(false);
-    }
-  }, [myOrderPhase]);
+  }, [myOrder, myOrderPhase, checkInScanOpen, manualCheckInOpen]);
 
   async function handleOrderCreated(order) {
     const id = await addOrder(order);
@@ -871,11 +889,21 @@ export default function App() {
               Review &amp; Submit
             </button>
           )}
-          <button style={S.fabSubmit} onClick={handleSaveDraft}>
+          <button
+            style={{ ...S.fabSubmit, ...(contactInfoComplete ? {} : S.btnDisabled) }}
+            onClick={handleSaveDraft}
+            disabled={!contactInfoComplete}
+            title={contactInfoComplete ? undefined : "Fill out every field in Request Details before saving"}
+          >
             <Icon.bell />
             <span>Save</span>
             {checkedOutItems.length > 0 && <span style={S.fabBadge}>{checkedOutItems.length}</span>}
           </button>
+          {!contactInfoComplete && (
+            <div style={{ ...S.tinyMuted, background: "#fff", padding: "4px 10px", borderRadius: 8, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+              Fill out all Request Details fields to save
+            </div>
+          )}
         </div>
       )}
 

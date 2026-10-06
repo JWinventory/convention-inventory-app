@@ -181,6 +181,7 @@ export function EditOrderModal({ order, items, title, hint, onSave, onClose }) {
               style={{ ...S.qtySelect, width: 60, marginRight: 8 }}
               value={li.qty}
               onChange={(e) => updateQty(li.name, e.target.value)}
+              onFocus={(e) => e.target.select()}
             />
             <button style={S.adminDeleteBtn} onClick={() => removeItem(li.name)}>
               Remove

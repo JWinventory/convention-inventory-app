@@ -218,7 +218,14 @@ export function AdminPage({ items, addItem, updateItem, deleteItem, seedIfEmpty,
           </label>
           <label style={S.fieldLabel}>
             Total Quantity
-            <input style={S.fieldInput} type="number" min="0" value={form.total} onChange={(e) => setForm((f) => ({ ...f, total: e.target.value }))} />
+            <input
+              style={S.fieldInput}
+              type="number"
+              min="0"
+              value={form.total}
+              onChange={(e) => setForm((f) => ({ ...f, total: e.target.value }))}
+              onFocus={(e) => e.target.select()}
+            />
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#1a1a2e", marginBottom: 14 }}>
             <input

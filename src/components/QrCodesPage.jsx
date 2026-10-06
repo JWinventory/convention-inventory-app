@@ -313,6 +313,7 @@ export function QrCodesPage({ items, updateItem }) {
               min="1"
               value={stickerCount}
               onChange={(e) => setStickerCount(e.target.value)}
+              onFocus={(e) => e.target.select()}
             />
           </label>
           <button style={S.primaryBtn} type="submit" disabled={!stickerText.trim()}>
@@ -525,6 +526,7 @@ export function QrCodesPage({ items, updateItem }) {
                               style={countInputStyle}
                               value={count}
                               onClick={(e) => e.stopPropagation()}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) => setCountDrafts((d) => ({ ...d, [item.id]: e.target.value }))}
                               onBlur={() => commitCount(item)}
                             />

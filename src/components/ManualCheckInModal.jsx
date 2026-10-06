@@ -14,25 +14,25 @@ function makeId() {
 
 // Phase 3, option 2: a digital check-in checklist for a requester
 // without a camera handy (or who'd rather type than scan) — one
-// number field per item instead of QR codes. Every item checked out
-// has to be accounted for in a single submission: the field starts
-// pre-filled with the full amount still checked out, and if what's
-// entered for an item doesn't match that, a quick note explaining the
+// number field per item instead of QR codes. This list is static, the
+// same way the printed checklist is: every item that was on the
+// order shows up, every time, with the quantity that was checked out
+// for it — it never tries to hide or shrink itself based on live
+// catalog state (an item renamed or removed from the catalog since
+// the order was placed used to vanish from here, or show a confusing
+// "0 of 0", even though it was never actually returned). The field
+// for each item starts pre-filled with the amount checked out, and if
+// what's entered doesn't match that, a quick note explaining the
 // difference is required before "Complete Check-In" will go through.
 // Whatever they enter is what gets checked in — the order still
 // closes out — but a note on a shortfall lands as an open action item
 // on the order, the same list a Reviewer works from once it shows up
-// on the Returns tab, so a missing item never just quietly disappears.
+// on the Returns tab, so a missing item never just quietly disappears;
+// staff, not the requester, are the ones who chase down a discrepancy.
 export function ManualCheckInModal({ order, lineItems, items, onResolveAction, onUpdateOrder, onReturnCompleted, onClose }) {
-  // Only items that still have something outstanding belong in this
-  // form — an item already fully checked in (via QR, or earlier in
-  // this same session) has nothing left to enter and would otherwise
-  // show up as a confusing, unfillable "0 of 0" row.
-  const pendingItems = lineItems.filter((li) => li.stillOut > 0);
-
   const [quantities, setQuantities] = useState(() => {
     const init = {};
-    for (const li of pendingItems) init[li.name] = String(li.stillOut);
+    for (const li of lineItems) init[li.name] = String(li.qty);
     return init;
   });
   const [notes, setNotes] = useState({});
@@ -74,7 +74,7 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
     const raw = quantities[li.name];
     if (raw === "" || raw === undefined) return false;
     const entered = Number(raw);
-    return !Number.isNaN(entered) && entered !== li.stillOut;
+    return !Number.isNaN(entered) && entered !== li.qty;
   }
 
   async function handleComplete() {
@@ -82,7 +82,7 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
 
     // Every field has to be a valid whole number in range before
     // anything gets submitted.
-    for (const li of pendingItems) {
+    for (const li of lineItems) {
       const raw = quantities[li.name];
       const entered = Number(raw);
       if (
@@ -91,14 +91,14 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
         Number.isNaN(entered) ||
         !Number.isInteger(entered) ||
         entered < 0 ||
-        entered > li.stillOut
+        entered > li.qty
       ) {
-        setError(`Enter a whole number between 0 and ${li.stillOut} for ${li.name}.`);
+        setError(`Enter a whole number between 0 and ${li.qty} for ${li.name}.`);
         return;
       }
     }
 
-    const mismatched = pendingItems.filter((li) => Number(quantities[li.name]) !== li.stillOut);
+    const mismatched = lineItems.filter((li) => Number(quantities[li.name]) !== li.qty);
     const missingNotes = mismatched.filter((li) => !(notes[li.name] || "").trim());
     if (missingNotes.length > 0) {
       setError(`Add a note explaining the difference for: ${missingNotes.map((li) => li.name).join(", ")}.`);
@@ -108,16 +108,27 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
     setSubmitting(true);
     try {
       const newActionItems = [];
-      for (const li of pendingItems) {
-        const liveItem = itemsRef.current.find((i) => i.name === li.name);
-        if (!liveItem) continue;
+      for (const li of lineItems) {
         const mismatch = mismatched.some((m) => m.name === li.name);
         const note = mismatch ? notes[li.name].trim() : undefined;
-        // Always release the full amount still checked out — the order
-        // closes out either way, and a shortfall is tracked separately
-        // as an action item rather than left half-checked-in forever.
-        // eslint-disable-next-line no-await-in-loop
-        await onResolveActionRef.current(liveItem.id, -li.stillOut, note);
+        // Always release whatever this order still actually has
+        // outstanding for the item (li.stillOut) — not the entered
+        // amount, and not the original order quantity — since the
+        // catalog's "out" count is shared across every order for that
+        // item; releasing the full original quantity regardless could
+        // double-release units someone already scanned in earlier via
+        // QR, and short another order's count. The order still closes
+        // out either way; a shortfall is tracked separately as an
+        // action item rather than left half-checked-in forever. If the
+        // catalog no longer has a matching item (renamed or deleted
+        // since the order went out), there's no live stock count to
+        // adjust, but the note still gets recorded below so staff
+        // aren't left in the dark.
+        const liveItem = itemsRef.current.find((i) => i.name === li.name);
+        if (liveItem && li.stillOut > 0) {
+          // eslint-disable-next-line no-await-in-loop
+          await onResolveActionRef.current(liveItem.id, -li.stillOut, note);
+        }
         if (mismatch) {
           newActionItems.push({
             id: makeId(),
@@ -166,15 +177,15 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
     );
   }
 
-  if (pendingItems.length === 0) {
+  if (lineItems.length === 0) {
     return (
       <Modal onClose={onClose} title="Check In — Enter Quantities">
         <div style={S.successBox}>
           <div style={S.successCheck}>
             <Icon.check size={28} />
           </div>
-          <div style={S.successTitle}>Nothing left to check in!</div>
-          <div style={S.tinyMuted}>Every item on this order has already been checked in.</div>
+          <div style={S.successTitle}>Nothing to check in.</div>
+          <div style={S.tinyMuted}>This order doesn't have any items on it.</div>
           <button style={{ ...S.primaryBtn, marginTop: 16 }} onClick={onClose}>
             Close
           </button>
@@ -192,7 +203,7 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
 
       {error && <div style={S.errorText}>{error}</div>}
 
-      {groupByDepartment(pendingItems).map((group) => (
+      {groupByDepartment(lineItems).map((group) => (
         <div key={group.department} style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", color: "#888", margin: "8px 0 4px" }}>
             {group.department}
@@ -224,18 +235,18 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
                     <input
                       type="number"
                       min={0}
-                      max={li.stillOut}
+                      max={li.qty}
                       style={{ ...S.fieldInput, width: 64, padding: "6px 8px", textAlign: "center" }}
                       value={quantities[li.name] ?? ""}
                       onChange={(e) => setQty(li.name, e.target.value)}
                     />
-                    <span style={{ fontSize: 12, color: "#888", whiteSpace: "nowrap" }}>of {li.stillOut}</span>
+                    <span style={{ fontSize: 12, color: "#888", whiteSpace: "nowrap" }}>of {li.qty}</span>
                   </div>
                 </div>
                 {mismatch && (
                   <div style={{ marginTop: 8 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#c0392b", marginBottom: 4 }}>
-                      That doesn't match the {li.stillOut} checked out — what happened?
+                      That doesn't match the {li.qty} checked out — what happened?
                     </div>
                     <textarea
                       style={S.textarea}

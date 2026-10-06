@@ -239,6 +239,7 @@ export function ManualCheckInModal({ order, lineItems, items, onResolveAction, o
                       style={{ ...S.fieldInput, width: 64, padding: "6px 8px", textAlign: "center" }}
                       value={quantities[li.name] ?? ""}
                       onChange={(e) => setQty(li.name, e.target.value)}
+                      onFocus={(e) => e.target.select()}
                     />
                     <span style={{ fontSize: 12, color: "#888", whiteSpace: "nowrap" }}>of {li.qty}</span>
                   </div>

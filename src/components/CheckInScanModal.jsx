@@ -338,9 +338,11 @@ export function CheckInScanModal({ order, lineItems, items, onResolveAction, onU
           <div style={S.successCheck}>
             <Icon.check size={28} />
           </div>
-          <div style={S.successTitle}>Thanks for returning all of the items!</div>
+          <div style={S.successTitle}>Everything has been checked in successfully.</div>
+          <div style={{ ...S.successTitle, marginTop: 2, marginBottom: 14 }}>Thanks for returning all of the items!</div>
+          <div style={{ fontWeight: 700, color: "#1a1a2e" }}>We will see you at the next event.</div>
           <div style={{ fontWeight: 700, color: "#1a1a2e", marginBottom: 10 }}>CEPC-Lubbock</div>
-          <div style={S.tinyMuted}>Everything has been checked in. You can now close this screen.</div>
+          <div style={S.tinyMuted}>You can now close this screen.</div>
           <button style={{ ...S.primaryBtn, marginTop: 16 }} onClick={onClose}>
             Return to Inventory Screen
           </button>

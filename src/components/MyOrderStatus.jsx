@@ -13,9 +13,19 @@ import { S } from "../styles";
 // items back in by department — using the exact same proven print
 // mechanism as the admin Print Lists page, so the two are guaranteed
 // to behave identically.
-export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn, onManualCheckIn }) {
+export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn, onManualCheckIn, onNotMyOrder }) {
   const allDone = lineItems.length > 0 && lineItems.every((li) => li.stillOut === 0);
   const [checklistActive, setChecklistActive] = useState(false);
+
+  // This screen "locks" the device to whichever order was last
+  // submitted or looked up here, so a shared/kiosk device needs a way
+  // out for the NEXT person — otherwise it just sits on someone else's
+  // order status until that whole order is checked back in.
+  function handleNotMyOrder() {
+    if (window.confirm("This will stop tracking this order on this device so you can start a new request. Continue?")) {
+      onNotMyOrder();
+    }
+  }
 
   useEffect(() => {
     function handleAfterPrint() {
@@ -57,6 +67,12 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn, onManual
           ? "Your equipment is ready. Scan each item's QR code below to check it in as you return it."
           : "Your request has been sent to the equipment coordinator. You'll get an email once it's ready — this screen will update automatically, no need to check back manually."}
       </p>
+
+      {onNotMyOrder && (
+        <button className="no-print" style={notMyOrderLinkStyle} onClick={handleNotMyOrder}>
+          Not your order? Start a new request
+        </button>
+      )}
 
       {phase === "submitted" && order && (
         <div style={{ ...S.tinyMuted, marginTop: 4, lineHeight: 1.6 }}>
@@ -219,3 +235,15 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn, onManual
     </div>
   );
 }
+
+const notMyOrderLinkStyle = {
+  display: "inline-block",
+  background: "none",
+  border: "none",
+  color: "#0072CE",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+  padding: 0,
+  marginTop: 6,
+};

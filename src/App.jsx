@@ -279,6 +279,22 @@ export default function App() {
     }
   }, [myOrder, myOrderPhase, checkInScanOpen, manualCheckInOpen]);
 
+  // Escape hatch for a shared/kiosk device: this is how someone who
+  // ISN'T the person who submitted the order on-screen gets back to a
+  // blank request form, without waiting for that whole order to be
+  // checked back in first. Only forgets this device's own local
+  // pointer to the order — the order itself, and whatever phase it's
+  // actually in, is untouched in Firestore; the original requester can
+  // always get back to it with "Already submitted an order?" and their
+  // phone number.
+  function handleNotMyOrder() {
+    localStorage.removeItem(MY_ORDER_KEY);
+    setMyOrderId(null);
+    setReviewOpen(false);
+    setCheckInScanOpen(false);
+    setManualCheckInOpen(false);
+  }
+
   async function handleOrderCreated(order) {
     const id = await addOrder(order);
     if (!id) {
@@ -804,6 +820,7 @@ export default function App() {
             phase={myOrderPhase}
             onScanCheckIn={() => setCheckInScanOpen(true)}
             onManualCheckIn={() => setManualCheckInOpen(true)}
+            onNotMyOrder={handleNotMyOrder}
           />
         ) : reviewOpen ? (
           <OrderReviewPage

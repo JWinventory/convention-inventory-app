@@ -1,13 +1,14 @@
-// Vercel serverless function — emails a volunteer once a Reviewer
-// assigns them a return action item (broken/missing/needs a new photo
-// or description, etc.), including which order it's on and the due
-// date. Reuses the same RESEND_API_KEY already configured for the
-// other notify endpoints.
+// Vercel serverless function — emails a volunteer once something on
+// the Break/Fix & Projects dashboard gets assigned to them: a return
+// follow-up item (broken/missing/needs a new photo or description) or
+// a standalone project. Reuses the same RESEND_API_KEY already
+// configured for the other notify endpoints.
 const TYPE_LABELS = {
   broken: "Broken",
   missing: "Missing",
   "needs-photo": "Needs Updated Photo",
   "needs-description": "Needs Updated Description",
+  project: "Project",
   other: "Other",
 };
 
@@ -27,7 +28,7 @@ export default async function handler(req, res) {
 
   const { volunteerEmail, volunteerName, requester, itemName, type, note, dueDate } = req.body || {};
   if (!note) {
-    res.status(400).json({ error: "Missing action item details." });
+    res.status(400).json({ error: "Missing item details." });
     return;
   }
 
@@ -49,18 +50,19 @@ export default async function handler(req, res) {
   }
 
   const typeLabel = TYPE_LABELS[type] || "Other";
-  const requesterName = requester?.name || "—";
+  const requesterName = requester?.name || "";
   const dueLine = dueDate ? `Due: ${dueDate}` : "No due date set";
+  const requesterLine = requesterName ? `\nOrder requester: ${requesterName}` : "";
 
-  const text = `You've been assigned a return follow-up item.
+  const text = `You've been assigned something on the Break/Fix & Projects dashboard.
 
 ${typeLabel}${itemName ? ` — ${itemName}` : ""}
 ${note}
 
-${dueLine}
-Order requester: ${requesterName}
+${dueLine}${requesterLine}
 
-Open the app's Admin > Returns tab for details, and mark it done once it's taken care of.
+Open the app's Admin > Break/Fix & Projects tab for details — you can attach photos there too — and
+mark it done once it's taken care of.
 
 Thank you for helping keep things running smoothly.
 
@@ -79,7 +81,7 @@ CEPC-Lubbock Equipment Team
         </td></tr>
 
         <tr><td style="padding: 28px 36px 0;">
-          <div style="font-size:21px; font-weight:700; color:#1a1a2e;">You've been assigned a return follow-up${volunteerName ? `, ${esc(volunteerName)}` : ""}</div>
+          <div style="font-size:21px; font-weight:700; color:#1a1a2e;">You've been assigned something on Break/Fix &amp; Projects${volunteerName ? `, ${esc(volunteerName)}` : ""}</div>
         </td></tr>
 
         <tr><td style="padding: 16px 36px 0;">
@@ -92,14 +94,14 @@ CEPC-Lubbock Equipment Team
 
         <tr><td style="padding: 22px 36px 0;">
           <div style="font-size:14px; color:#333; line-height:1.6;">
-            <strong>${dueDate ? `Due: ${esc(dueDate)}` : "No due date set"}</strong><br/>
-            Order requester: ${esc(requesterName)}
+            <strong>${dueDate ? `Due: ${esc(dueDate)}` : "No due date set"}</strong>
+            ${requesterName ? `<br/>Order requester: ${esc(requesterName)}` : ""}
           </div>
         </td></tr>
 
         <tr><td style="padding: 26px 36px 36px; font-size:14px; color:#333; line-height:1.6;">
-          Open the app's <strong>Admin &gt; Returns</strong> tab for details, and mark it done once it's
-          taken care of.<br/><br/>
+          Open the app's <strong>Admin &gt; Break/Fix &amp; Projects</strong> tab for details — you can
+          attach photos there too — and mark it done once it's taken care of.<br/><br/>
           <span style="color:#0072CE; font-weight:800;">Warmly, CEPC-Lubbock Equipment Team</span>
         </td></tr>
       </table>
@@ -118,7 +120,7 @@ CEPC-Lubbock Equipment Team
       body: JSON.stringify({
         from: "CEPC-Lubbock <alerts@notify.jw-inventory.com>",
         to: [volunteerEmail],
-        subject: `Return follow-up assigned: ${typeLabel}${itemName ? ` — ${itemName}` : ""}`,
+        subject: `Break/Fix assigned: ${typeLabel}${itemName ? ` — ${itemName}` : ""}`,
         html,
         text,
       }),

@@ -20,6 +20,7 @@ const ITEMS_COL = "items";
 const ORDERS_COL = "orders";
 const DRAFTS_COL = "drafts";
 const VOLUNTEERS_COL = "volunteers";
+const BREAKFIX_COL = "breakfix";
 const META_DOC = "meta/shared";
 
 export function useInventory() {
@@ -28,6 +29,7 @@ export function useInventory() {
   const [drafts, setDrafts] = useState([]);
   const [volunteers, setVolunteers] = useState([]);
   const [volunteersReady, setVolunteersReady] = useState(false);
+  const [breakfixItems, setBreakfixItems] = useState([]); // standalone break/fix projects, not tied to any order
   const [reviewerIds, setReviewerIds] = useState([]); // up to 4 volunteer ids; 1 review required to advance an order
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState("yellow"); // green | yellow | red
@@ -100,6 +102,22 @@ export function useInventory() {
         setVolunteersReady(true);
       },
       () => setVolunteersReady(true)
+    );
+    return () => unsub();
+  }, []);
+
+  // live standalone break/fix projects — equipment issues logged
+  // directly (not generated from a return check-in), e.g. something
+  // noticed in storage between events.
+  useEffect(() => {
+    if (!firebaseConfigured) return;
+    const q = query(collection(db, BREAKFIX_COL), orderBy("createdAtMs", "desc"));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setBreakfixItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      () => {}
     );
     return () => unsub();
   }, []);
@@ -345,6 +363,51 @@ export function useInventory() {
     }
   }, []);
 
+  // A standalone break/fix project — something logged directly on the
+  // Break/Fix & Projects tab rather than generated from a return
+  // check-in. Any volunteer with Orders/Returns access can create one.
+  const addBreakfixProject = useCallback(async (project) => {
+    setSyncStatus("yellow");
+    try {
+      const ref = await addDoc(collection(db, BREAKFIX_COL), {
+        title: project.title || "",
+        description: project.description || "",
+        photos: Array.isArray(project.photos) ? project.photos : [],
+        createdBy: project.createdBy || "Unnamed volunteer",
+        createdAtMs: Date.now(),
+        assignedToId: null,
+        assignedToName: null,
+        dueDate: null,
+        status: "open",
+      });
+      setSyncStatus("green");
+      return ref.id;
+    } catch (e) {
+      setSyncStatus("red");
+      return null;
+    }
+  }, []);
+
+  const updateBreakfixProject = useCallback(async (id, patch) => {
+    setSyncStatus("yellow");
+    try {
+      await updateDoc(doc(db, BREAKFIX_COL, id), patch);
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
+    }
+  }, []);
+
+  const deleteBreakfixProject = useCallback(async (id) => {
+    setSyncStatus("yellow");
+    try {
+      await deleteDoc(doc(db, BREAKFIX_COL, id));
+      setSyncStatus("green");
+    } catch (e) {
+      setSyncStatus("red");
+    }
+  }, []);
+
   // Creates a new volunteer record (no password yet — they set their
   // own the first time they log in). Returns the new id.
   const addVolunteer = useCallback(async ({ name, phone, email, permissions }) => {
@@ -432,6 +495,7 @@ export function useInventory() {
     drafts,
     volunteers,
     volunteersReady,
+    breakfixItems,
     reviewerIds,
     loading,
     syncStatus,
@@ -454,5 +518,8 @@ export function useInventory() {
     resetVolunteerPassword,
     setVolunteerPassword,
     saveReviewerIds,
+    addBreakfixProject,
+    updateBreakfixProject,
+    deleteBreakfixProject,
   };
 }

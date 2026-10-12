@@ -7,6 +7,7 @@ import { QrCodesPage } from "./QrCodesPage";
 import { EmergencyChecklistPage } from "./EmergencyChecklistPage";
 import { VolunteersPage } from "./VolunteersPage";
 import { ReturnReviewPage } from "./ReturnReviewPage";
+import { BreakFixPage } from "./BreakFixPage";
 
 const SESSION_KEY = "volunteerSessionId";
 
@@ -37,6 +38,7 @@ export function AdminHub({
   onDeleteOrder,
   volunteers,
   volunteersReady,
+  breakfixItems,
   reviewerIds,
   onAddVolunteer,
   onUpdateVolunteer,
@@ -46,6 +48,9 @@ export function AdminHub({
   onSaveReviewerIds,
   onUpdateOrder,
   onAssignActionItem,
+  onAddBreakfixProject,
+  onUpdateBreakfixProject,
+  onAssignBreakfixProject,
 }) {
   const [sessionId, setSessionId] = useState(() => sessionStorage.getItem(SESSION_KEY) || null);
   const [section, setSection] = useState(null);
@@ -97,6 +102,7 @@ export function AdminHub({
   if (currentVolunteer.permissions?.catalog) SECTIONS.push({ key: "catalog", label: "Catalog" });
   if (currentVolunteer.permissions?.orders) SECTIONS.push({ key: "orders", label: "Orders" });
   if (currentVolunteer.permissions?.orders) SECTIONS.push({ key: "returns", label: "Returns" });
+  if (currentVolunteer.permissions?.orders) SECTIONS.push({ key: "breakfix", label: "Break/Fix & Projects" });
   SECTIONS.push({ key: "history", label: "History" });
   SECTIONS.push({ key: "qrcodes", label: "QR Codes" });
   SECTIONS.push({ key: "emergency", label: "Print Lists" });
@@ -167,6 +173,21 @@ export function AdminHub({
           isCurrentVolunteerAdmin={Boolean(currentVolunteer.permissions?.volunteers)}
           onUpdateOrder={onUpdateOrder}
           onAssignActionItem={onAssignActionItem}
+        />
+      )}
+      {activeSection === "breakfix" && (
+        <BreakFixPage
+          orders={orders}
+          breakfixItems={breakfixItems}
+          volunteers={volunteers}
+          reviewerIds={reviewerIds}
+          currentVolunteerName={currentVolunteer.name}
+          isCurrentVolunteerAdmin={Boolean(currentVolunteer.permissions?.volunteers)}
+          onUpdateOrder={onUpdateOrder}
+          onAssignActionItem={onAssignActionItem}
+          onAddBreakfixProject={onAddBreakfixProject}
+          onUpdateBreakfixProject={onUpdateBreakfixProject}
+          onAssignBreakfixProject={onAssignBreakfixProject}
         />
       )}
       {activeSection === "history" && (

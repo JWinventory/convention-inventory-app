@@ -115,6 +115,7 @@ export default function App() {
     drafts,
     volunteers,
     volunteersReady,
+    breakfixItems,
     reviewerIds,
     syncStatus,
     seedIfEmpty,
@@ -135,6 +136,9 @@ export default function App() {
     resetVolunteerPassword,
     setVolunteerPassword,
     saveReviewerIds,
+    addBreakfixProject,
+    updateBreakfixProject,
+    deleteBreakfixProject,
   } = useInventory();
 
   const [tab, setTab] = useState("inventory"); // inventory | admin
@@ -624,9 +628,10 @@ export default function App() {
     }
   }
 
-  // Staff-side: a Reviewer assigning a return action item to a
-  // volunteer — the assignment itself is already saved on the order by
-  // the time this runs; this just sends the volunteer their notice.
+  // Staff-side: a volunteer assigning a return action item to someone
+  // on the Break/Fix & Projects dashboard — the assignment itself is
+  // already saved on the order by the time this runs; this just sends
+  // the volunteer their notice.
   async function handleAssignActionItem(order, actionItem, volunteer, dueDate) {
     if (!volunteer?.email) return;
     try {
@@ -648,6 +653,32 @@ export default function App() {
       }
     } catch (err) {
       // Assignment is already saved even if this email fails to send.
+      console.error("notify-action-item request failed:", err);
+    }
+  }
+
+  // Same alert, for a standalone break/fix project (one not tied to
+  // any order's return) — no requester to reference, so that part of
+  // the email is just left out.
+  async function handleAssignBreakfixProject(project, volunteer, dueDate) {
+    if (!volunteer?.email) return;
+    try {
+      const res = await fetch("/api/notify-action-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          volunteerEmail: volunteer.email,
+          volunteerName: volunteer.name,
+          itemName: project.title || "",
+          type: "project",
+          note: project.description || "",
+          dueDate: dueDate || "",
+        }),
+      });
+      if (!res.ok) {
+        console.error("notify-action-item failed:", res.status, await res.text());
+      }
+    } catch (err) {
       console.error("notify-action-item request failed:", err);
     }
   }
@@ -803,6 +834,7 @@ export default function App() {
             onDeleteOrder={handleDeleteOrder}
             volunteers={volunteers}
             volunteersReady={volunteersReady}
+            breakfixItems={breakfixItems}
             reviewerIds={reviewerIds}
             onAddVolunteer={addVolunteer}
             onUpdateVolunteer={updateVolunteer}
@@ -812,6 +844,9 @@ export default function App() {
             onSaveReviewerIds={saveReviewerIds}
             onUpdateOrder={updateOrder}
             onAssignActionItem={handleAssignActionItem}
+            onAddBreakfixProject={addBreakfixProject}
+            onUpdateBreakfixProject={updateBreakfixProject}
+            onAssignBreakfixProject={handleAssignBreakfixProject}
           />
         ) : myOrderPhase !== "none" ? (
           <MyOrderStatus

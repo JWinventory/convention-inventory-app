@@ -2,7 +2,9 @@
 // the Break/Fix & Projects dashboard gets assigned to them: a return
 // follow-up item (broken/missing/needs a new photo or description) or
 // a standalone project. Reuses the same RESEND_API_KEY already
-// configured for the other notify endpoints.
+// configured for the other notify endpoints, and matches their same
+// layout (navy header bar, blue instruction box, uppercase labeled
+// detail sections, same sign-off).
 const TYPE_LABELS = {
   broken: "Broken",
   missing: "Missing",
@@ -39,6 +41,8 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Basic HTML-escaping so a name or note containing &, <, or > can
+  // never break the markup or inject anything into the email.
   function esc(value) {
     return String(value ?? "").replace(/[&<>"']/g, (c) => ({
       "&": "&amp;",
@@ -51,15 +55,15 @@ export default async function handler(req, res) {
 
   const typeLabel = TYPE_LABELS[type] || "Other";
   const requesterName = requester?.name || "";
-  const dueLine = dueDate ? `Due: ${dueDate}` : "No due date set";
-  const requesterLine = requesterName ? `\nOrder requester: ${requesterName}` : "";
+  const requesterPhone = requester?.phone || "";
 
+  // --- Plain-text fallback ---
   const text = `You've been assigned something on the Break/Fix & Projects dashboard.
 
-${typeLabel}${itemName ? ` — ${itemName}` : ""}
-${note}
+Type: ${typeLabel}
+${itemName ? `Item/Project: ${itemName}\n` : ""}Note: ${note}
 
-${dueLine}${requesterLine}
+Due Date: ${dueDate || "No due date set"}${requesterName ? `\nOrder requester: ${requesterName}${requesterPhone ? ` (${requesterPhone})` : ""}` : ""}
 
 Open the app's Admin > Break/Fix & Projects tab for details — you can attach photos there too — and
 mark it done once it's taken care of.
@@ -70,6 +74,7 @@ Warmly,
 CEPC-Lubbock Equipment Team
 `;
 
+  // --- HTML version: same blended design as the other notify emails ---
   const html = `<!DOCTYPE html>
 <html>
 <body style="margin:0; padding:0; background:#eef0f3;">
@@ -86,6 +91,14 @@ CEPC-Lubbock Equipment Team
 
         <tr><td style="padding: 16px 36px 0;">
           <div style="background:#eaf3fc; border-radius:10px; padding:16px 18px; font-size:14px; color:#1a1a2e; line-height:1.6;">
+            Open the app's <strong>Admin &gt; Break/Fix &amp; Projects</strong> tab for details — you can
+            attach photos there too — and mark it done once it's taken care of.
+          </div>
+        </td></tr>
+
+        <tr><td style="padding: 26px 36px 0;">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#999; border-bottom:1px solid #eee; padding-bottom:6px;">Job Details</div>
+          <div style="font-size:14px; color:#333; padding-top:8px; line-height:1.6;">
             <span style="display:inline-block; background:#fdecea; color:#c0392b; font-size:11px; font-weight:800; border-radius:12px; padding:2px 10px; text-transform:uppercase; letter-spacing:0.3px;">${esc(typeLabel)}</span>
             ${itemName ? `<div style="font-weight:700; margin-top:8px;">${esc(itemName)}</div>` : ""}
             <div style="margin-top:8px;">${esc(note)}</div>
@@ -93,15 +106,15 @@ CEPC-Lubbock Equipment Team
         </td></tr>
 
         <tr><td style="padding: 22px 36px 0;">
-          <div style="font-size:14px; color:#333; line-height:1.6;">
-            <strong>${dueDate ? `Due: ${esc(dueDate)}` : "No due date set"}</strong>
-            ${requesterName ? `<br/>Order requester: ${esc(requesterName)}` : ""}
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#999; border-bottom:1px solid #eee; padding-bottom:6px;">Due Date</div>
+          <div style="font-size:14px; color:#333; padding-top:8px; line-height:1.6;">
+            ${dueDate ? esc(dueDate) : "No due date set"}
+            ${requesterName ? `<br/>Order requester: ${esc(requesterName)}${requesterPhone ? ` (${esc(requesterPhone)})` : ""}` : ""}
           </div>
         </td></tr>
 
         <tr><td style="padding: 26px 36px 36px; font-size:14px; color:#333; line-height:1.6;">
-          Open the app's <strong>Admin &gt; Break/Fix &amp; Projects</strong> tab for details — you can
-          attach photos there too — and mark it done once it's taken care of.<br/><br/>
+          Thank you for helping keep things running smoothly.<br/><br/>
           <span style="color:#0072CE; font-weight:800;">Warmly, CEPC-Lubbock Equipment Team</span>
         </td></tr>
       </table>

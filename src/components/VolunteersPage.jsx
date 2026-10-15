@@ -196,6 +196,7 @@ function PermCheckbox({ label, checked, onChange }) {
 }
 
 function EditVolunteerModal({ volunteer, onSave, onClose }) {
+  const [name, setName] = useState(volunteer.name || "");
   const [phone, setPhone] = useState(volunteer.phone || "");
   const [email, setEmail] = useState(volunteer.email || "");
   const [perms, setPerms] = useState({
@@ -206,6 +207,10 @@ function EditVolunteerModal({ volunteer, onSave, onClose }) {
 
   return (
     <Modal title={`Edit ${volunteer.name}`} onClose={onClose}>
+      <label style={S.fieldLabel}>
+        Name
+        <input style={S.fieldInput} value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+      </label>
       <label style={S.fieldLabel}>
         Phone
         <input style={S.fieldInput} value={phone} onChange={(e) => setPhone(e.target.value)} />
@@ -220,7 +225,11 @@ function EditVolunteerModal({ volunteer, onSave, onClose }) {
         <PermCheckbox label="Manage Orders" checked={perms.orders} onChange={(v) => setPerms((p) => ({ ...p, orders: v }))} />
         <PermCheckbox label="Manage Volunteers" checked={perms.volunteers} onChange={(v) => setPerms((p) => ({ ...p, volunteers: v }))} />
       </div>
-      <button style={S.primaryBtn} onClick={() => onSave({ phone: phone.trim(), email: email.trim(), permissions: perms })}>
+      <button
+        style={S.primaryBtn}
+        disabled={!name.trim()}
+        onClick={() => onSave({ name: name.trim(), phone: phone.trim(), email: email.trim(), permissions: perms })}
+      >
         Save Changes
       </button>
     </Modal>

@@ -748,6 +748,100 @@ export default function App() {
     await updateOrder(order.id, { items: newItems, ...(newDetails || {}) });
   }
 
+  // Staff-side: brings a fully-returned (or cancelled) order back from
+  // History as a brand-new active request — same requester and items
+  // it opened with (staff can tweak either, above all the dates,
+  // before this fires — see the edit screen in OrderHistoryPage), so a
+  // repeat request doesn't have to be rebuilt from scratch. This
+  // creates a genuinely NEW order: its own id, its own fresh
+  // review/assignment/fulfillment cycle, and its own live inventory
+  // reservation (identical to a brand-new submission — nothing's still
+  // checked out for these items, since they were already returned
+  // when the original landed in History). The original stays exactly
+  // as it was in History, completely untouched. The new order is
+  // tagged with where it came from so the requester's own order-status
+  // screen (MyOrderStatus) can make that obvious to them, rather than
+  // looking like a stray leftover order with someone else's old data.
+  async function handleReactivateOrder(order, newItems, newDetails) {
+    const requester = {
+      name: newDetails.requesterName || "",
+      phone: newDetails.requesterPhone || "",
+      eventType: newDetails.eventType || "",
+      eventDate: newDetails.eventDate || "",
+      pickupDate: newDetails.pickupDate || "",
+      returnDate: newDetails.returnDate || "",
+      circuit: newDetails.circuit || "",
+      hasReturner: Boolean(newDetails.hasReturner),
+      returnerName: newDetails.returnerName || "",
+      returnerPhone: newDetails.returnerPhone || "",
+      returnerEmail: newDetails.returnerEmail || "",
+      returnerCircuit: newDetails.returnerCircuit || "",
+    };
+
+    const id = await addOrder({
+      requester,
+      requesterEmail: order.requesterEmail || "",
+      items: newItems,
+      notes: order.notes || "",
+      reactivatedFromOrderId: order.id,
+      reactivatedFromLabel: order.createdAtLabel || "",
+    });
+    if (!id) {
+      window.alert("Could not reactivate this order — check your connection and try again.");
+      return;
+    }
+
+    for (const li of newItems) {
+      const liveItem = items.find((i) => i.name === li.name);
+      if (liveItem) {
+        // eslint-disable-next-line no-await-in-loop
+        await applyCheckChange(liveItem.id, li.qty, requester.name || "Reactivated order", "Reactivated from a past order");
+      }
+    }
+
+    const reviewerEmails = reviewerIds
+      .map((rid) => volunteers.find((v) => v.id === rid)?.email)
+      .filter(Boolean)
+      .join(", ");
+    try {
+      const res = await fetch("/api/notify-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewerEmail: reviewerEmails,
+          requester: { name: requester.name, phone: requester.phone },
+          eventType: requester.eventType,
+          eventDate: requester.eventDate,
+          items: newItems,
+        }),
+      });
+      if (!res.ok) console.error("notify-review failed:", res.status, await res.text());
+    } catch (err) {
+      console.error("notify-review request failed:", err);
+    }
+
+    try {
+      const res = await fetch("/api/notify-submitted", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requesterEmail: order.requesterEmail || "",
+          returnerEmail: requester.hasReturner ? requester.returnerEmail : "",
+          requester: { name: requester.name, phone: requester.phone },
+          returner: requester.hasReturner ? { name: requester.returnerName, phone: requester.returnerPhone } : null,
+          eventType: requester.eventType,
+          eventDate: requester.eventDate,
+          pickupDate: requester.pickupDate,
+          returnDate: requester.returnDate,
+          items: newItems,
+        }),
+      });
+      if (!res.ok) console.error("notify-submitted failed:", res.status, await res.text());
+    } catch (err) {
+      console.error("notify-submitted request failed:", err);
+    }
+  }
+
   // Cancels an in-progress (not-yet-submitted) draft. A draft never
   // reserves live inventory — that only happens once an order is
   // actually submitted — so cancelling one is just deleting the draft
@@ -845,6 +939,7 @@ export default function App() {
             onCancelDraft={handleCancelDraft}
             onUpdateDraftItems={handleUpdateDraftItems}
             onDeleteOrder={handleDeleteOrder}
+            onReactivateOrder={handleReactivateOrder}
             volunteers={volunteers}
             volunteersReady={volunteersReady}
             breakfixItems={breakfixItems}

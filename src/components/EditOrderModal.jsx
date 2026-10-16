@@ -13,7 +13,7 @@ const EVENT_TYPES = ["Circuit Assembly", "Regional Convention", "Memorial"];
 // since it hasn't been submitted yet. Either way, this is currently
 // the only way to correct a requester's details after they've saved —
 // there's no self-service edit path once something's submitted.
-export function EditOrderModal({ order, items, title, hint, onSave, onClose }) {
+export function EditOrderModal({ order, items, title, hint, saveLabel, onSave, onClose }) {
   const [editItems, setEditItems] = useState(() => (order.items || []).map((li) => ({ ...li })));
   const [addItemName, setAddItemName] = useState("");
   const [details, setDetails] = useState(() => ({
@@ -205,7 +205,7 @@ export function EditOrderModal({ order, items, title, hint, onSave, onClose }) {
       </div>
 
       <button style={{ ...S.primaryBtn, marginTop: 16 }} disabled={saving} onClick={handleSave}>
-        {saving ? "Saving…" : "Save Changes"}
+        {saving ? "Saving…" : saveLabel || "Save Changes"}
       </button>
       <button style={S.secondaryBtn} onClick={onClose}>
         Cancel

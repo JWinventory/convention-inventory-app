@@ -321,6 +321,15 @@ function FirstTimeSetup({ onAddVolunteer, onSetVolunteerPassword, onLoggedIn }) 
   );
 }
 
+// Generates the 6-digit code emailed for the second login step. Not
+// stored anywhere in plaintext — only its hash ever reaches Firestore
+// (see sendLoginCode below), the same way a real password is handled,
+// so reading the volunteers collection directly can't hand someone a
+// working code.
+function makeLoginCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
 function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLoggedIn }) {
   const [selectedId, setSelectedId] = useState("");
   const [password, setPassword] = useState("");
@@ -328,9 +337,49 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
+  const [codeStep, setCodeStep] = useState(false);
+  const [code, setCode] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [codeAttempts, setCodeAttempts] = useState(0);
+  const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const selected = volunteers.find((v) => v.id === selectedId) || null;
   const needsNewPassword = selected && !selected.passwordHash;
+
+  // Second factor: generates a fresh 6-digit code, saves only its hash
+  // (plus a 10-minute expiry) on the volunteer's own record, and
+  // emails the plaintext code — the email inbox is the actual secret,
+  // not anything sitting in the database.
+  async function sendLoginCode(volunteer) {
+    const plainCode = makeLoginCode();
+    const hashRes = await fetch("/api/hash-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: plainCode }),
+    });
+    const hashData = await hashRes.json();
+    if (!hashRes.ok) {
+      throw new Error(hashData.error || "Couldn't generate a login code.");
+    }
+    await onUpdateVolunteer(volunteer.id, {
+      loginCodeHash: hashData.hash,
+      loginCodeSalt: hashData.salt,
+      loginCodeExpiresAtMs: Date.now() + 10 * 60 * 1000,
+    });
+    if (!volunteer.email) {
+      throw new Error("no-email");
+    }
+    const res = await fetch("/api/notify-login-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ volunteerEmail: volunteer.email, volunteerName: volunteer.name, code: plainCode }),
+    });
+    if (!res.ok) {
+      console.error("notify-login-code failed:", res.status, await res.text());
+      throw new Error("Couldn't send your login code — check your connection and try again.");
+    }
+  }
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -357,9 +406,15 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
           return;
         }
         await onSetVolunteerPassword(selected.id, hashData.hash, hashData.salt);
-        onLoggedIn(selected.id);
+        await sendLoginCode(selected);
+        setCodeStep(true);
       } catch (err) {
-        setError("Something went wrong setting up your password.");
+        setError(
+          err?.message === "no-email"
+            ? "Your password is set, but there's no email on file to send a login code to — ask an admin to add one."
+            : err?.message || "Something went wrong setting up your password."
+        );
+      } finally {
         setBusy(false);
       }
       return;
@@ -372,16 +427,82 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
         body: JSON.stringify({ password, hash: selected.passwordHash, salt: selected.passwordSalt }),
       });
       const data = await res.json();
-      if (data.ok) {
-        onLoggedIn(selected.id);
-      } else {
+      if (!data.ok) {
         setError("Incorrect password.");
         setBusy(false);
+        return;
       }
+      await sendLoginCode(selected);
+      setCodeStep(true);
     } catch (err) {
-      setError("Couldn't verify password — check your connection.");
+      setError(
+        err?.message === "no-email"
+          ? "That password is correct, but there's no email on file to send a login code to — ask an admin to add one."
+          : err?.message || "Couldn't verify password — check your connection."
+      );
+    } finally {
       setBusy(false);
     }
+  }
+
+  async function handleVerifyCode(e) {
+    e.preventDefault();
+    if (!selected || code.trim().length !== 6) return;
+    setCodeError("");
+    setVerifying(true);
+    try {
+      if (!selected.loginCodeExpiresAtMs || Date.now() > selected.loginCodeExpiresAtMs) {
+        setCodeError("That code has expired — send a new one.");
+        setVerifying(false);
+        return;
+      }
+      const res = await fetch("/api/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: code.trim(), hash: selected.loginCodeHash, salt: selected.loginCodeSalt }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        await onUpdateVolunteer(selected.id, { loginCodeHash: null, loginCodeSalt: null, loginCodeExpiresAtMs: null });
+        onLoggedIn(selected.id);
+        return;
+      }
+      const attempts = codeAttempts + 1;
+      setCodeAttempts(attempts);
+      setCode("");
+      setCodeError(
+        attempts >= 5 ? "Too many wrong tries — send a new code." : "That code isn't right — double check and try again."
+      );
+    } catch (err) {
+      setCodeError("Couldn't verify that code — check your connection.");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  async function handleResendCode() {
+    if (!selected) return;
+    setResending(true);
+    setCodeError("");
+    try {
+      await sendLoginCode(selected);
+      setCode("");
+      setCodeAttempts(0);
+      setCodeError("A new code is on its way.");
+    } catch (err) {
+      setCodeError(err?.message || "Couldn't send a new code — check your connection.");
+    } finally {
+      setResending(false);
+    }
+  }
+
+  function handleUseDifferentAccount() {
+    setCodeStep(false);
+    setCode("");
+    setCodeError("");
+    setCodeAttempts(0);
+    setPassword("");
+    setConfirm("");
   }
 
   if (forgotOpen) {
@@ -391,6 +512,50 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
         onUpdateVolunteer={onUpdateVolunteer}
         onBack={() => setForgotOpen(false)}
       />
+    );
+  }
+
+  if (codeStep && selected) {
+    const tooManyAttempts = codeAttempts >= 5;
+    return (
+      <div style={S.card}>
+        <h2 style={S.cardTitle}>Check Your Email</h2>
+        <p style={S.tinyMuted}>
+          We sent a 6-digit code to {selected.email || "your email"}. Enter it below to finish logging in —
+          it's good for 10 minutes.
+        </p>
+        <form onSubmit={handleVerifyCode}>
+          <label style={S.fieldLabel}>
+            Login Code
+            <input
+              style={{ ...S.fieldInput, letterSpacing: 4, fontSize: 18, textAlign: "center" }}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onFocus={(e) => e.target.select()}
+              inputMode="numeric"
+              placeholder="000000"
+              maxLength={6}
+              disabled={tooManyAttempts}
+            />
+          </label>
+          {codeError && <div style={S.errorText}>{codeError}</div>}
+          <button
+            style={S.primaryBtn}
+            type="submit"
+            disabled={code.trim().length !== 6 || verifying || tooManyAttempts}
+          >
+            {verifying ? "Verifying…" : "Verify & Log In"}
+          </button>
+        </form>
+        <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
+          <button style={forgotLinkStyle} disabled={resending} onClick={handleResendCode}>
+            {resending ? "Sending…" : "Resend Code"}
+          </button>
+          <button style={forgotLinkStyle} onClick={handleUseDifferentAccount}>
+            Use a Different Account
+          </button>
+        </div>
+      </div>
     );
   }
 

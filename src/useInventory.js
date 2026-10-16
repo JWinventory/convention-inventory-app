@@ -229,6 +229,13 @@ export function useInventory() {
   // Creates the order and returns its new id, so the requester's own
   // browser can track "this is my order" through the fulfillment/
   // check-in phases. Starts life with status "submitted".
+  //
+  // order.reactivatedFromOrderId/reactivatedFromLabel are optional —
+  // set only when this order was brought back from History instead of
+  // submitted fresh (see handleReactivateOrder in App.jsx) — and get
+  // carried onto the new order so the requester's own status screen,
+  // and staff reviewing it, can both tell it picked up from a past
+  // request rather than being a stray duplicate.
   const addOrder = useCallback(async (order) => {
     setSyncStatus("yellow");
     try {
@@ -253,6 +260,9 @@ export function useInventory() {
         assignedFillers: [],
         createdAtMs: Date.now(),
         createdAtLabel: new Date().toLocaleString(),
+        ...(order.reactivatedFromOrderId
+          ? { reactivatedFromOrderId: order.reactivatedFromOrderId, reactivatedFromLabel: order.reactivatedFromLabel || "" }
+          : {}),
       });
       setSyncStatus("green");
       return ref.id;

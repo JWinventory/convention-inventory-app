@@ -141,7 +141,20 @@ export default function App() {
     deleteBreakfixProject,
   } = useInventory();
 
-  const [tab, setTab] = useState("inventory"); // inventory | admin
+  // A password-reset email link lands here with ?resetToken=... in the
+  // URL — captured once on first render (before anything strips it),
+  // and the URL is cleaned up immediately so refreshing or sharing the
+  // link again doesn't re-trigger the reset screen.
+  const [resetToken] = useState(() => new URLSearchParams(window.location.search).get("resetToken"));
+  useEffect(() => {
+    if (resetToken) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("resetToken");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [resetToken]);
+
+  const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).get("resetToken") ? "admin" : "inventory")); // inventory | admin
   const [requester, setRequester] = useState(defaultRequester);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
@@ -847,6 +860,7 @@ export default function App() {
             onAddBreakfixProject={addBreakfixProject}
             onUpdateBreakfixProject={updateBreakfixProject}
             onAssignBreakfixProject={handleAssignBreakfixProject}
+            resetToken={resetToken}
           />
         ) : myOrderPhase !== "none" ? (
           <MyOrderStatus

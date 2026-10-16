@@ -74,6 +74,14 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn, onManual
         </button>
       )}
 
+      {order?.reactivatedFromLabel && (
+        <div className="no-print" style={reactivatedBannerStyle}>
+          This request was reactivated from a past order (originally submitted {order.reactivatedFromLabel}) — it's
+          a fresh request now, not leftover data, so double-check the details below are still correct for this
+          event.
+        </div>
+      )}
+
       {phase === "submitted" && order && (
         <div style={{ ...S.tinyMuted, marginTop: 4, lineHeight: 1.6 }}>
           {order.requesterName || "—"} · {order.requesterPhone || "—"}
@@ -235,6 +243,17 @@ export function MyOrderStatus({ order, lineItems, phase, onScanCheckIn, onManual
     </div>
   );
 }
+
+const reactivatedBannerStyle = {
+  background: "#fff8e6",
+  border: "1px solid #f0d58c",
+  borderRadius: 8,
+  padding: "10px 12px",
+  marginTop: 10,
+  fontSize: 12.5,
+  color: "#7a5c00",
+  lineHeight: 1.5,
+};
 
 const notMyOrderLinkStyle = {
   display: "inline-block",

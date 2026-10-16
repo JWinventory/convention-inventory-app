@@ -347,6 +347,98 @@ function makeLoginCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+// "Remember this device" for 2FA: skips the emailed code (not the
+// password) on a device that already proved itself once, for 30 days.
+// The actual secret — a random per-device token — lives only in this
+// browser's localStorage and is never sent to Firestore; only its hash
+// (plus an expiry) is saved on the volunteer's own record, in the
+// trustedDevices array, the same hash-only treatment already used for
+// passwords and login codes. A volunteer can carry a few of these at
+// once (different devices), so old/expired ones are pruned whenever a
+// new one is added rather than letting the list grow forever.
+const TRUSTED_DEVICE_DAYS = 30;
+const MAX_TRUSTED_DEVICES = 8;
+const TRUSTED_DEVICE_KEY_PREFIX = "convention-inventory-trusted-device-";
+
+function getStoredDeviceToken(volunteerId) {
+  try {
+    return localStorage.getItem(TRUSTED_DEVICE_KEY_PREFIX + volunteerId);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredDeviceToken(volunteerId, token) {
+  try {
+    localStorage.setItem(TRUSTED_DEVICE_KEY_PREFIX + volunteerId, token);
+  } catch {
+    // Storage might be unavailable (private browsing, etc.) — the
+    // device just won't be remembered next time; nothing else breaks.
+  }
+}
+
+function makeDeviceToken() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// Checks this browser's stored token (if any) against the volunteer's
+// saved trusted-device hashes. Expired entries are skipped (and swept
+// out for good the next time a device is remembered).
+async function isDeviceTrusted(volunteer) {
+  const token = getStoredDeviceToken(volunteer.id);
+  if (!token) return false;
+  const entries = Array.isArray(volunteer.trustedDevices) ? volunteer.trustedDevices : [];
+  const now = Date.now();
+  for (const entry of entries) {
+    if (!entry || !entry.expiresAtMs || entry.expiresAtMs < now) continue;
+    try {
+      const res = await fetch("/api/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: token, hash: entry.hash, salt: entry.salt }),
+      });
+      const data = await res.json();
+      if (data.ok) return true;
+    } catch {
+      // Network hiccup — fall through to asking for a code instead of
+      // silently failing the login.
+    }
+  }
+  return false;
+}
+
+// Remembers this device for the given volunteer: mints a fresh token,
+// hashes it, saves the hash (with a 30-day expiry) onto the
+// volunteer's record alongside any of their other still-valid trusted
+// devices, and keeps the plaintext token only in this browser.
+// Non-fatal if any of this fails — the device just won't be
+// remembered, the login itself has already succeeded.
+async function rememberThisDevice(volunteer, onUpdateVolunteer) {
+  try {
+    const token = makeDeviceToken();
+    const hashRes = await fetch("/api/hash-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: token }),
+    });
+    const hashData = await hashRes.json();
+    if (!hashRes.ok) return;
+    const now = Date.now();
+    const existing = Array.isArray(volunteer.trustedDevices) ? volunteer.trustedDevices : [];
+    const stillValid = existing.filter((e) => e && e.expiresAtMs && e.expiresAtMs > now);
+    const next = [
+      ...stillValid.slice(-(MAX_TRUSTED_DEVICES - 1)),
+      { hash: hashData.hash, salt: hashData.salt, expiresAtMs: now + TRUSTED_DEVICE_DAYS * 24 * 60 * 60 * 1000 },
+    ];
+    await onUpdateVolunteer(volunteer.id, { trustedDevices: next });
+    setStoredDeviceToken(volunteer.id, token);
+  } catch {
+    // See comment above — not remembering the device is the only
+    // consequence of a failure here.
+  }
+}
+
 function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLoggedIn }) {
   const [selectedId, setSelectedId] = useState("");
   const [password, setPassword] = useState("");
@@ -360,6 +452,7 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
   const [codeAttempts, setCodeAttempts] = useState(0);
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
+  const [rememberDevice, setRememberDevice] = useState(true);
 
   const selected = volunteers.find((v) => v.id === selectedId) || null;
   const needsNewPassword = selected && !selected.passwordHash;
@@ -423,6 +516,8 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
           return;
         }
         await onSetVolunteerPassword(selected.id, hashData.hash, hashData.salt);
+        // Brand-new password, so there's no way this device could
+        // already be trusted — straight to the code step.
         await sendLoginCode(selected);
         setCodeStep(true);
       } catch (err) {
@@ -447,6 +542,12 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
       if (!data.ok) {
         setError("Incorrect password.");
         setBusy(false);
+        return;
+      }
+      // Password's good — if this device already proved itself within
+      // the last 30 days, skip the emailed code and log straight in.
+      if (await isDeviceTrusted(selected)) {
+        onLoggedIn(selected.id);
         return;
       }
       await sendLoginCode(selected);
@@ -481,6 +582,9 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
       const data = await res.json();
       if (data.ok) {
         await onUpdateVolunteer(selected.id, { loginCodeHash: null, loginCodeSalt: null, loginCodeExpiresAtMs: null });
+        if (rememberDevice) {
+          await rememberThisDevice(selected, onUpdateVolunteer);
+        }
         onLoggedIn(selected.id);
         return;
       }
@@ -520,6 +624,7 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
     setCodeAttempts(0);
     setPassword("");
     setConfirm("");
+    setRememberDevice(true);
   }
 
   if (forgotOpen) {
@@ -554,6 +659,19 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
               maxLength={6}
               disabled={tooManyAttempts}
             />
+          </label>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 4, fontSize: 12.5, color: "#1a1a2e" }}>
+            <input
+              type="checkbox"
+              checked={rememberDevice}
+              onChange={(e) => setRememberDevice(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>
+              Remember this device for 30 days, so I don't get asked for a code again here.
+              <br />
+              <span style={S.tinyMuted}>Leave this unchecked on a shared or public computer.</span>
+            </span>
           </label>
           {codeError && <div style={S.errorText}>{codeError}</div>}
           <button

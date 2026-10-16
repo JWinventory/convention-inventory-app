@@ -323,6 +323,21 @@ function FirstTimeSetup({ onAddVolunteer, onSetVolunteerPassword, onLoggedIn }) 
   );
 }
 
+// Volunteer names are stored as one free-text "name" field (no
+// separate first/last), so "last name" just means the last
+// whitespace-separated word — good enough for sorting a dropdown and
+// avoids needing a schema change.
+function lastNameOf(fullName) {
+  const parts = String(fullName || "").trim().split(/\s+/);
+  return parts[parts.length - 1] || "";
+}
+
+function sortByLastName(list) {
+  return [...list].sort((a, b) =>
+    lastNameOf(a.name).localeCompare(lastNameOf(b.name), undefined, { sensitivity: "base" })
+  );
+}
+
 // Generates the 6-digit code emailed for the second login step. Not
 // stored anywhere in plaintext — only its hash ever reaches Firestore
 // (see sendLoginCode below), the same way a real password is handled,
@@ -578,7 +593,7 @@ function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLo
             }}
           >
             <option value="">Select…</option>
-            {volunteers.map((v) => (
+            {sortByLastName(volunteers).map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
               </option>

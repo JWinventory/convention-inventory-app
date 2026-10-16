@@ -1,19 +1,26 @@
 import React, { useMemo, useState } from "react";
 import { S } from "../styles";
+import { EditOrderModal } from "./EditOrderModal";
 
 // Every order that's been fully checked back in lands here permanently
 // — it's off the Orders page so that list stays focused on what's
 // actually in progress, but nothing is deleted automatically, so past
 // requests can always be looked up. Deleting one here is permanent and
 // restricted to the designated Reviewer or a full admin, same as
-// cancelling an order.
-export function OrderHistoryPage({ orders, items, volunteers, reviewerIds, currentVolunteerName, isCurrentVolunteerAdmin, onDeleteOrder }) {
+// cancelling an order. Reactivating one (same permission) opens an
+// edit screen pre-filled with the original's details and items and,
+// on save, creates a brand-new active order from them — the original
+// stays here, untouched.
+export function OrderHistoryPage({ orders, items, volunteers, reviewerIds, currentVolunteerName, isCurrentVolunteerAdmin, onDeleteOrder, onReactivateOrder }) {
   const [search, setSearch] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  const [reactivatingOrder, setReactivatingOrder] = useState(null);
+  const [reactivating, setReactivating] = useState(false);
 
   const reviewerNames = (volunteers || []).filter((v) => (reviewerIds || []).includes(v.id)).map((v) => v.name);
   const isReviewer = reviewerNames.includes(currentVolunteerName);
   const canDelete = isReviewer || Boolean(isCurrentVolunteerAdmin);
+  const canReactivate = canDelete;
 
   const completedOrders = useMemo(() => {
     return orders
@@ -103,7 +110,27 @@ export function OrderHistoryPage({ orders, items, volunteers, reviewerIds, curre
                 <strong>Notes:</strong> {order.notes}
               </div>
             )}
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", textAlign: "right" }}>
+            {order.reactivatedFromLabel && (
+              <div style={{ ...S.tinyMuted, marginTop: 6 }}>
+                Reactivated from an order submitted {order.reactivatedFromLabel}.
+              </div>
+            )}
+            <div
+              style={{
+                marginTop: 12,
+                paddingTop: 12,
+                borderTop: "1px solid #eee",
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                gap: 14,
+              }}
+            >
+              {canReactivate ? (
+                <button style={S.adminEditBtn} onClick={() => setReactivatingOrder(order)}>
+                  Reactivate
+                </button>
+              ) : null}
               {canDelete ? (
                 <button
                   style={deleteLinkStyle}
@@ -121,12 +148,31 @@ export function OrderHistoryPage({ orders, items, volunteers, reviewerIds, curre
                 </button>
               ) : (
                 <span style={{ ...S.tinyMuted, fontSize: 11 }}>
-                  Only the reviewer or an admin can delete this.
+                  Only the reviewer or an admin can delete or reactivate this.
                 </span>
               )}
             </div>
           </div>
         ))
+      )}
+
+      {reactivatingOrder && (
+        <EditOrderModal
+          order={reactivatingOrder}
+          items={items}
+          title={`Reactivate Order — ${reactivatingOrder.requesterName || "Requester"}`}
+          hint="This creates a brand-new request using these details and items, picking up right where the original left off — update anything that's changed since then (the event, pickup, and return dates, above all) before creating it. The original stays here in History, untouched."
+          saveLabel={reactivating ? "Creating…" : "Create Reactivated Order"}
+          onSave={async (newItems, newDetails) => {
+            setReactivating(true);
+            try {
+              await onReactivateOrder(reactivatingOrder, newItems, newDetails);
+            } finally {
+              setReactivating(false);
+            }
+          }}
+          onClose={() => setReactivatingOrder(null)}
+        />
       )}
     </div>
   );

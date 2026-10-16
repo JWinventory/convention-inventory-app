@@ -36,6 +36,7 @@ export function AdminHub({
   onCancelDraft,
   onUpdateDraftItems,
   onDeleteOrder,
+  onReactivateOrder,
   volunteers,
   volunteersReady,
   breakfixItems,
@@ -215,6 +216,7 @@ export function AdminHub({
           currentVolunteerName={currentVolunteer.name}
           isCurrentVolunteerAdmin={Boolean(currentVolunteer.permissions?.volunteers)}
           onDeleteOrder={onDeleteOrder}
+          onReactivateOrder={onReactivateOrder}
         />
       )}
       {activeSection === "qrcodes" && <QrCodesPage items={items} updateItem={updateItem} />}

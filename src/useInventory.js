@@ -466,10 +466,14 @@ export function useInventory() {
 
   // Clears a volunteer's password so their next login prompts them to
   // create a brand new one — this is what "admin resets a password" means.
+  // Clearing trustedDevices here too: a password reset should mean any
+  // device that was skipping the emailed 2FA code (see LoginForm in
+  // AdminHub.jsx) has to prove itself again, not keep riding on trust
+  // that was earned under the old password.
   const resetVolunteerPassword = useCallback(async (id) => {
     setSyncStatus("yellow");
     try {
-      await updateDoc(doc(db, VOLUNTEERS_COL, id), { passwordHash: null, passwordSalt: null });
+      await updateDoc(doc(db, VOLUNTEERS_COL, id), { passwordHash: null, passwordSalt: null, trustedDevices: [] });
       setSyncStatus("green");
     } catch (e) {
       setSyncStatus("red");
@@ -479,7 +483,7 @@ export function useInventory() {
   const setVolunteerPassword = useCallback(async (id, hash, salt) => {
     setSyncStatus("yellow");
     try {
-      await updateDoc(doc(db, VOLUNTEERS_COL, id), { passwordHash: hash, passwordSalt: salt });
+      await updateDoc(doc(db, VOLUNTEERS_COL, id), { passwordHash: hash, passwordSalt: salt, trustedDevices: [] });
       setSyncStatus("green");
     } catch (e) {
       setSyncStatus("red");

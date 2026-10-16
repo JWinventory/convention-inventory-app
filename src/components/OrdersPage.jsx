@@ -378,6 +378,7 @@ function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVo
               {order.requesterName || "Unnamed requester"}
             </span>
             <StatusTag status={order.status} />
+            {order.reactivatedFromLabel && <span style={reactivatedTagStyle}>Reactivated</span>}
           </div>
         </div>
         <div style={{ ...S.tinyMuted, textAlign: "right" }}>Submitted {order.createdAtLabel || "—"}</div>
@@ -390,6 +391,11 @@ function OrderCard({ order, volunteerNames, volunteers, reviewerNames, currentVo
         {order.circuit || "—"} · {order.eventType || "—"} · Event {order.eventDate || "—"} · Pickup{" "}
         {order.pickupDate || "—"} · Return {order.returnDate || "—"}
       </div>
+      {order.reactivatedFromLabel && (
+        <div style={{ ...S.tinyMuted, marginTop: 4 }}>
+          Reactivated from an order originally submitted {order.reactivatedFromLabel}.
+        </div>
+      )}
 
       {order.hasReturner && (
         <div style={{ ...orderDetailTextStyle, marginTop: 6 }}>
@@ -764,6 +770,17 @@ function StatusTag({ status }) {
     </span>
   );
 }
+
+const reactivatedTagStyle = {
+  background: "#f0e6fb",
+  color: "#6c3483",
+  fontSize: 10,
+  fontWeight: 700,
+  borderRadius: 12,
+  padding: "1px 8px",
+  textTransform: "uppercase",
+  letterSpacing: 0.3,
+};
 
 const needsReviewBannerStyle = {
   background: "#fdecea",

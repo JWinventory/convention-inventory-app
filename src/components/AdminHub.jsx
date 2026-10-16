@@ -51,6 +51,7 @@ export function AdminHub({
   onAddBreakfixProject,
   onUpdateBreakfixProject,
   onAssignBreakfixProject,
+  resetToken,
 }) {
   const [sessionId, setSessionId] = useState(() => sessionStorage.getItem(SESSION_KEY) || null);
   const [section, setSection] = useState(null);
@@ -85,6 +86,20 @@ export function AdminHub({
     );
   }
 
+  // A valid reset link takes priority over everything else, including
+  // an existing session — that's the whole point of it: getting back
+  // in without needing to already be logged in.
+  if (resetToken) {
+    return (
+      <ResetPasswordScreen
+        resetToken={resetToken}
+        volunteers={volunteers}
+        onUpdateVolunteer={onUpdateVolunteer}
+        onLoggedIn={handleLoggedIn}
+      />
+    );
+  }
+
   if (!currentVolunteer) {
     if (volunteers.length === 0) {
       return <FirstTimeSetup onAddVolunteer={onAddVolunteer} onSetVolunteerPassword={onSetVolunteerPassword} onLoggedIn={handleLoggedIn} />;
@@ -92,6 +107,7 @@ export function AdminHub({
     return (
       <LoginForm
         volunteers={volunteers}
+        onUpdateVolunteer={onUpdateVolunteer}
         onSetVolunteerPassword={onSetVolunteerPassword}
         onLoggedIn={handleLoggedIn}
       />
@@ -305,12 +321,13 @@ function FirstTimeSetup({ onAddVolunteer, onSetVolunteerPassword, onLoggedIn }) 
   );
 }
 
-function LoginForm({ volunteers, onSetVolunteerPassword, onLoggedIn }) {
+function LoginForm({ volunteers, onUpdateVolunteer, onSetVolunteerPassword, onLoggedIn }) {
   const [selectedId, setSelectedId] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   const selected = volunteers.find((v) => v.id === selectedId) || null;
   const needsNewPassword = selected && !selected.passwordHash;
@@ -367,6 +384,16 @@ function LoginForm({ volunteers, onSetVolunteerPassword, onLoggedIn }) {
     }
   }
 
+  if (forgotOpen) {
+    return (
+      <ForgotPasswordForm
+        volunteers={volunteers}
+        onUpdateVolunteer={onUpdateVolunteer}
+        onBack={() => setForgotOpen(false)}
+      />
+    );
+  }
+
   return (
     <div style={S.card}>
       <h2 style={S.cardTitle}>Admin Log In</h2>
@@ -416,9 +443,202 @@ function LoginForm({ volunteers, onSetVolunteerPassword, onLoggedIn }) {
           {busy ? "Please wait…" : needsNewPassword ? "Create Password & Log In" : "Log In"}
         </button>
       </form>
+      {!needsNewPassword && (
+        <button style={forgotLinkStyle} onClick={() => setForgotOpen(true)}>
+          Forgot your password? Click here to reset
+        </button>
+      )}
     </div>
   );
 }
+
+// Step 1 of self-service reset: look up the account by email (not by
+// the name dropdown — someone who's locked out may not remember which
+// entry is theirs, but they know their own email) and, if it matches,
+// email a one-time link that's good for an hour. The same confirmation
+// message shows either way, so this can't be used to probe which
+// emails have an account.
+function ForgotPasswordForm({ volunteers, onUpdateVolunteer, onBack }) {
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+
+  function makeToken() {
+    return typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) return;
+    setBusy(true);
+    setError("");
+    try {
+      const match = volunteers.find((v) => (v.email || "").trim().toLowerCase() === trimmed);
+      if (match && match.email) {
+        const resetToken = makeToken();
+        const resetTokenExpiresAtMs = Date.now() + 60 * 60 * 1000; // 1 hour
+        await onUpdateVolunteer(match.id, { resetToken, resetTokenExpiresAtMs });
+        const resetLink = `${window.location.origin}${window.location.pathname}?resetToken=${resetToken}`;
+        const res = await fetch("/api/notify-password-reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ volunteerEmail: match.email, volunteerName: match.name, resetLink }),
+        });
+        if (!res.ok) {
+          console.error("notify-password-reset failed:", res.status, await res.text());
+        }
+      }
+      // Same confirmation whether or not a match was found.
+      setSent(true);
+    } catch (err) {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (sent) {
+    return (
+      <div style={S.card}>
+        <h2 style={S.cardTitle}>Check Your Email</h2>
+        <p style={S.tinyMuted}>
+          If that email matches an account, a reset link is on its way — it's good for one hour. Follow it
+          to set a new password.
+        </p>
+        <button style={S.secondaryBtn} onClick={onBack}>
+          Back to Log In
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={S.card}>
+      <h2 style={S.cardTitle}>Reset Your Password</h2>
+      <p style={S.tinyMuted}>Enter the email on file for your account — we'll send a link to reset your password.</p>
+      <form onSubmit={handleSubmit}>
+        <label style={S.fieldLabel}>
+          Email
+          <input
+            style={S.fieldInput}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="name@example.com"
+          />
+        </label>
+        {error && <div style={S.errorText}>{error}</div>}
+        <button style={S.primaryBtn} type="submit" disabled={!email.trim() || busy}>
+          {busy ? "Sending…" : "Send Reset Link"}
+        </button>
+      </form>
+      <button style={forgotLinkStyle} onClick={onBack}>
+        Back to Log In
+      </button>
+    </div>
+  );
+}
+
+// Step 2: landed here from the emailed link (?resetToken=...). Looks
+// up whichever volunteer currently holds that exact token and hasn't
+// let it expire, then lets them set a brand new password — no need to
+// already be logged in, since being locked out is the whole reason
+// they're here. Signs them straight in once it's set.
+function ResetPasswordScreen({ resetToken, volunteers, onUpdateVolunteer, onLoggedIn }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const match = volunteers.find(
+    (v) => v.resetToken && v.resetToken === resetToken && (v.resetTokenExpiresAtMs || 0) > Date.now()
+  );
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!match) return;
+    if (password.length < 4 || password !== confirm) {
+      setError("Passwords must match and be at least 4 characters.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const hashRes = await fetch("/api/hash-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const hashData = await hashRes.json();
+      if (!hashRes.ok) {
+        setError(hashData.error || "Couldn't set your new password.");
+        setBusy(false);
+        return;
+      }
+      await onUpdateVolunteer(match.id, {
+        passwordHash: hashData.hash,
+        passwordSalt: hashData.salt,
+        resetToken: null,
+        resetTokenExpiresAtMs: null,
+      });
+      onLoggedIn(match.id);
+    } catch (err) {
+      setError("Something went wrong setting your new password.");
+      setBusy(false);
+    }
+  }
+
+  if (!match) {
+    return (
+      <div style={S.card}>
+        <h2 style={S.cardTitle}>Reset Link Expired</h2>
+        <p style={S.tinyMuted}>
+          This link is no longer valid — it may have already been used, or more than an hour has passed.
+          Go back and request a new one, or ask an admin to reset your password from the Volunteers tab.
+        </p>
+        <button style={S.primaryBtn} onClick={() => window.location.replace(window.location.pathname)}>
+          Back to Log In
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={S.card}>
+      <h2 style={S.cardTitle}>Set a New Password, {match.name}</h2>
+      <form onSubmit={handleSubmit}>
+        <label style={S.fieldLabel}>
+          New Password
+          <input style={S.fieldInput} type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        <label style={S.fieldLabel}>
+          Confirm Password
+          <input style={S.fieldInput} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        </label>
+        {error && <div style={S.errorText}>{error}</div>}
+        <button style={S.primaryBtn} type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Save Password & Log In"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+const forgotLinkStyle = {
+  display: "block",
+  background: "none",
+  border: "none",
+  color: "#0072CE",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+  padding: 0,
+  marginTop: 12,
+};
 
 const loggedInBarStyle = {
   display: "flex",
